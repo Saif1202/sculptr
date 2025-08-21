@@ -8,6 +8,9 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
+import { requestNotificationPermissions } from '@/utils';
+import { scheduleDailyWeightReminderIfNeeded } from '@/utils/weightReminders';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -37,14 +40,39 @@ export default function RootLayout() {
     },
   } as const;
 
+  // Redirect between auth/app routes based on authentication
+  useEffect(() => {
+    if (!isHydrated) return;
+    const inAuthGroup = segments[0] === '(auth)';
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(app)/dashboard');
+    }
+  }, [isHydrated, isAuthenticated, segments.join(':')]);
+
+  // Schedule weight reminder on app start and auth state changes
+  useEffect(() => {
+    (async () => {
+      if (isAuthenticated && user?.uid) {
+        const granted = await requestNotificationPermissions();
+        if (granted) {
+          await scheduleDailyWeightReminderIfNeeded(user.uid);
+        }
+      }
+    })();
+  }, [isAuthenticated]);
+
   return (
     <ThemeProvider value={midnightTheme}>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="light" />
+      <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''}>
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(app)" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="light" />
+      </StripeProvider>
     </ThemeProvider>
   );
 }

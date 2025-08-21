@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db } from '@/src/lib/firebase';
 import {
   doc,
   getDoc,
@@ -25,7 +25,22 @@ export type UserProfile = {
 export type WeightEntry = { uid: string; date: string; weightKg: number };
 export type MealPlan = { uid: string; id?: string; title: string; days: any };
 export type TrainingPlan = { uid: string; id?: string; title: string; days: any };
-export type CheckIn = { uid: string; date: string; notes?: string };
+export type Program = 'fat_loss' | 'recomp' | 'muscle_gain' | 'maintenance';
+export type CheckIn = {
+  uid: string;
+  weekStart: string; // YYYY-MM-DD (Monday)
+  program: Program;
+  caloriesTarget: number;
+  proteinTarget: number;
+  carbsTarget: number;
+  fatTarget: number;
+  stepsTarget: number;
+  lissMinutesTarget: number;
+  restDayKcalAdjustment?: number; // fat loss only: -200
+  notes?: string;
+  createdAt?: any;
+  updatedAt?: any;
+};
 export type Subscription = { uid: string; status: 'active'|'canceled'|'past_due'; renewsAt?: string };
 
 // Profiles
@@ -90,7 +105,19 @@ export async function getCheckIns(uid: string) {
 }
 
 export async function addCheckIn(checkIn: CheckIn) {
-  await addDoc(collection(db, 'checkIns'), { ...checkIn, createdAt: serverTimestamp() });
+  await addDoc(collection(db, 'checkIns'), { ...checkIn, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
+export async function upsertWeeklyCheckIn(checkIn: CheckIn) {
+  // unique by uid + weekStart
+  const qy = query(collection(db, 'checkIns'), where('uid', '==', checkIn.uid), where('weekStart', '==', checkIn.weekStart));
+  const snap = await getDocs(qy);
+  if (snap.empty) {
+    await addDoc(collection(db, 'checkIns'), { ...checkIn, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  } else {
+    const docRef = doc(db, 'checkIns', snap.docs[0].id);
+    await updateDoc(docRef, { ...checkIn, updatedAt: serverTimestamp() });
+  }
 }
 
 // Subscriptions
