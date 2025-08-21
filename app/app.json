@@ -1,0 +1,16 @@
+{
+"expo": {
+"name": "Sculptr",
+"slug": "sculptr",
+"scheme": "sculptr",
+"android": {
+"package": "com.sculptr.sculptr",
+"googleServicesFile": "./google-services.json"
+},
+"ios": {
+"bundleIdentifier": "com.sculptr.sculptr",
+"googleServicesFile": "./GoogleService-Info.plist"
+},
+"plugins": ["expo-notifications"]
+}
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "930165905974",
+    "project_id": "sculptr-55fe0",
+    "storage_bucket": "sculptr-55fe0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:930165905974:android:25708632986d4803851697",
+        "android_client_info": {
+          "package_name": "com.yourcompany.sculptr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAR9QL2zWArA-FlqiOat6nMXcnfpyK0qO8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
