@@ -36,7 +36,7 @@ export async function scheduleDailyWeightReminderIfNeeded(uid: string) {
       sound: true,
       priority: Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger,
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: trigger },
   });
   await AsyncStorage.setItem(STORAGE_KEY, id);
   return true;

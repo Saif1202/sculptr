@@ -3,7 +3,8 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
-import { getReactNativePersistence, initializeAuth } from 'firebase/auth/react-native';
+// React Native specific auth persistence lives under '@react-native-firebase/auth'
+// In Expo (Web SDK), we import from 'firebase/auth' and use getReactNativePersistence
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
@@ -18,9 +19,6 @@ const firebaseConfig = {
 let app: FirebaseApp;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
 } else {
   app = getApps()[0]!;
 }

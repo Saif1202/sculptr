@@ -1,4 +1,4 @@
-import { ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider, Theme } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -23,12 +23,7 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
-
-  const midnightTheme = {
+  const midnightTheme: Theme = {
     dark: true,
     colors: {
       primary: Colors.dark.tint,
@@ -38,7 +33,13 @@ export default function RootLayout() {
       border: '#142042',
       notification: Colors.dark.tint,
     },
-  } as const;
+    fonts: {
+      regular: { fontFamily: 'System', fontWeight: '400' },
+      medium: { fontFamily: 'System', fontWeight: '500' },
+      bold: { fontFamily: 'System', fontWeight: '700' },
+      heavy: { fontFamily: 'System', fontWeight: '800' },
+    },
+  };
 
   // Redirect between auth/app routes based on authentication
   useEffect(() => {
@@ -49,30 +50,36 @@ export default function RootLayout() {
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/(app)/dashboard');
     }
-  }, [isHydrated, isAuthenticated, segments.join(':')]);
+  }, [isHydrated, isAuthenticated, router, segments]);
 
   // Schedule weight reminder on app start and auth state changes
   useEffect(() => {
+    let isMounted = true;
     (async () => {
-      if (isAuthenticated && user?.uid) {
+      if (isMounted && isAuthenticated && user?.uid) {
         const granted = await requestNotificationPermissions();
         if (granted) {
           await scheduleDailyWeightReminderIfNeeded(user.uid);
         }
       }
     })();
-  }, [isAuthenticated]);
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, user?.uid]);
 
   return (
     <ThemeProvider value={midnightTheme}>
-      <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''}>
-        <Stack>
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="light" />
-      </StripeProvider>
+      {loaded ? (
+        <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''}>
+          <Stack>
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(app)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="light" />
+        </StripeProvider>
+      ) : null}
     </ThemeProvider>
   );
 }
