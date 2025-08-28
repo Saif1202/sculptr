@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { requestNotificationPermissions } from '@/utils';
 import { scheduleDailyWeightReminderIfNeeded } from '@/utils/weightReminders';
-import { StripeProvider } from '@stripe/stripe-react-native';
+import { StripeProvider } from '@/components/StripeProvider';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

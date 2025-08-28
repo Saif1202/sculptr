@@ -1,0 +1,2 @@
+export { StripeProvider } from '@stripe/stripe-react-native';
+
