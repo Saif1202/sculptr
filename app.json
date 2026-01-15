@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "sculptr",
+    "slug": "sculptr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/sculptr-logo.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "sculptr",
+    "splash": {
+      "image": "./assets/images/sculptr-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sculptr.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow SculptR to access Camera to scan barcodes and identify food products.",
+        "NSHealthShareUsageDescription": "Allow SculptR to read your health data including steps, workouts, and weight from Apple Health.",
+        "NSHealthUpdateUsageDescription": "Allow SculptR to write workout data to Apple Health.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": [
+          "health-records"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.sculptr.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/sculptr-logo.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SculptR to access Camera to scan barcodes and identify food products."
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "03510d98-91a2-4c6f-b570-e2a658304fda"
+      }
+    },
+    "owner": "saif1202"
+  }
+}
