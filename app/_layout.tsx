@@ -1,21 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Animated } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../src/lib/firebase';
 import { colors } from '../src/theme';
 import { ensureTargetsForUser } from '../src/lib/ensureTargets';
 import { initPurchases, syncTierToFirestore } from '../src/lib/billing';
+import Logo from '../src/components/Logo';
 
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const scaleAnim = useRef(new Animated.Value(1.5)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Start burst fade animation
+    Animated.sequence([
+      // Burst in: scale from 1.5 to 1 with bounce, fade in
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Hold for a moment
+      Animated.delay(300),
+      // Fade out
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       
@@ -85,7 +114,17 @@ export default function RootLayout() {
       <>
         <StatusBar style="light" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
+          <Animated.View
+            style={[
+              styles.logoContainer,
+              {
+                transform: [{ scale: scaleAnim }],
+                opacity: opacityAnim,
+              },
+            ]}
+          >
+            <Logo size={120} />
+          </Animated.View>
         </View>
       </>
     );
@@ -157,6 +196,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
