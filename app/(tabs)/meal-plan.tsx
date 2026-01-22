@@ -3,14 +3,16 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput,
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, collection, onSnapshot, addDoc, deleteDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { doc, collection, onSnapshot, addDoc, deleteDoc, serverTimestamp, query, orderBy, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../src/lib/firebase';
 import { colors } from '../../src/theme';
 import { todayISO } from '../../src/utils/date';
 import { FoodSearchModal } from '../(modals)/food-search';
 import FoodScannerModal from '../(modals)/food-scanner';
 import FoodConfirmModal from '../(modals)/food-confirm';
+import PresetMealPlansModal from '../(modals)/preset-meal-plans';
 import type { FoodItem } from '../../src/lib/food';
+import { generateMealPlan, GenerateMealPlanPayload } from '../../src/lib/functions';
 
 interface Targets {
   calories: number;
@@ -41,6 +43,7 @@ export default function MealPlanScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [confirmFood, setConfirmFood] = useState<(FoodItem & { id?: string }) | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [presetPlansVisible, setPresetPlansVisible] = useState(false);
   
   // Modal form state
   const [label, setLabel] = useState('');
@@ -49,6 +52,7 @@ export default function MealPlanScreen() {
   const [carbsG, setCarbsG] = useState('');
   const [fatsG, setFatsG] = useState('');
   const [saving, setSaving] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -147,6 +151,57 @@ export default function MealPlanScreen() {
     used.calories < targets.calories - 75
   ) : false;
 
+  const handleGenerateAIMealPlan = async () => {
+    if (!user || !targets || !profileGoal) {
+      Alert.alert('Requirements', 'Please complete your profile and ensure targets are set to generate an AI meal plan.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      const profile = userDoc.exists() ? (userDoc.data() as any)?.profile : null;
+
+      if (!profile) {
+        Alert.alert('Profile Required', 'Please complete your profile first.');
+        setAiGenerating(false);
+        return;
+      }
+
+      const payload: GenerateMealPlanPayload = {
+        profile: {
+          goal: profile.goal,
+          sex: profile.sex,
+          weightKg: profile.weightKg,
+          heightCm: profile.heightCm,
+          age: profile.age,
+          activity: profile.activity,
+        },
+        targets: {
+          calories: targets.calories,
+          proteinG: targets.proteinG,
+          carbsG: targets.carbsG,
+          fatsG: targets.fatsG,
+        },
+      };
+
+      const result = await generateMealPlan(payload);
+      
+      // Show success message with option to view plan
+      Alert.alert(
+        'Meal Plan Generated!',
+        `A 7-day meal plan has been generated matching your targets. You can now add meals manually or ask Jim in chat for meal suggestions.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('AI meal plan generation error:', error);
+      Alert.alert('Error', error.message || 'Failed to generate meal plan. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const handleDelete = async (entryId: string) => {
     if (!user) return;
     
@@ -241,7 +296,22 @@ export default function MealPlanScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Meal Plan</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Meal Plan</Text>
+          <TouchableOpacity
+            style={[styles.aiButton, aiGenerating && styles.aiButtonDisabled]}
+            onPress={handleGenerateAIMealPlan}
+            disabled={aiGenerating || !targets || !profileGoal}
+          >
+            {aiGenerating ? (
+              <ActivityIndicator color={colors.text} size="small" />
+            ) : (
+              <>
+                <Text style={styles.aiButtonText}>🤖 AI Plan</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Strength Banner */}
         {profileGoal === 'Strength & Conditioning' && (
@@ -342,6 +412,9 @@ export default function MealPlanScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.libraryButton} onPress={() => setShowScanner(true)}>
             <Text style={styles.libraryButtonText}>Scan Barcode</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.libraryButton} onPress={() => setPresetPlansVisible(true)}>
+            <Text style={styles.libraryButtonText}>Preset Plans</Text>
           </TouchableOpacity>
         </View>
 
@@ -492,6 +565,20 @@ export default function MealPlanScreen() {
           onAdded={handleFoodAdded}
         />
       )}
+
+      {/* Preset Meal Plans Modal */}
+      {user && (
+        <PresetMealPlansModal
+          visible={presetPlansVisible}
+          onClose={() => setPresetPlansVisible(false)}
+          userId={user.uid}
+          userGoal={profileGoal || undefined}
+          onPlanApplied={() => {
+            // Refresh entries will happen automatically via Firestore listener
+            setPresetPlansVisible(false);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -509,11 +596,39 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 100,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 24,
+    flex: 1,
+  },
+  aiButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aiButtonDisabled: {
+    opacity: 0.5,
+  },
+  aiButtonText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

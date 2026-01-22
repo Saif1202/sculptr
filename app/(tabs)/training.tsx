@@ -45,6 +45,7 @@ import WorkoutBuilderModal from '../(modals)/workout-builder';
 import StartSessionModal from '../(modals)/start-session';
 import SessionHistoryModal, { SessionHistoryItem } from '../(modals)/session-history';
 import { calcAge } from '../../src/logic/nutrition';
+import { generateWorkoutProgram, GenerateWorkoutProgramPayload } from '../../src/lib/functions';
 
 type TabKey = 'library' | 'workouts' | 'schedule';
 
@@ -145,6 +146,9 @@ export default function TrainingScreen() {
   const [assignModalVisible, setAssignModalVisible] = useState(false);
   const [assignDay, setAssignDay] = useState<keyof PlannerDays | null>(null);
   const [assignWorkoutId, setAssignWorkoutId] = useState<string | null>(null);
+  
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const requestedTab = Array.isArray(tab) ? tab[0] : tab;
   const displayedWorkouts = useMemo(() => (workouts.length ? workouts : localWorkouts), [workouts, localWorkouts]);
@@ -193,6 +197,7 @@ export default function TrainingScreen() {
   useEffect(() => {
     if (!user) {
       setProfileAge(null);
+      setUserProfile(null);
       return;
     }
     const userDoc = doc(db, 'users', user.uid);
@@ -203,9 +208,13 @@ export default function TrainingScreen() {
           const data = snapshot.data() as any;
           const age = data?.profile?.age ?? (data?.profile?.dob ? calcAge(data.profile.dob) : null);
           setProfileAge(age ?? null);
+          setUserProfile(data?.profile ?? null);
         }
       },
-      () => setProfileAge(null)
+      () => {
+        setProfileAge(null);
+        setUserProfile(null);
+      }
     );
     return () => unsubscribe();
   }, [user]);
@@ -458,6 +467,93 @@ export default function TrainingScreen() {
     }
   };
 
+  const handleGenerateAIWorkout = async () => {
+    if (!user || !userProfile) {
+      Alert.alert('Profile Required', 'Please complete your profile first to generate AI workouts.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const payload: GenerateWorkoutProgramPayload = {
+        profile: {
+          goal: userProfile.goal,
+          sex: userProfile.sex,
+          weightKg: userProfile.weightKg,
+          heightCm: userProfile.heightCm,
+          age: userProfile.age ?? profileAge ?? undefined,
+          activity: userProfile.activity,
+        },
+        preferences: {
+          daysPerWeek: 4,
+          experience: 'intermediate',
+        },
+      };
+
+      const result = await generateWorkoutProgram(payload);
+      
+      // Save generated workouts and track IDs
+      const workoutIdMap: Record<string, string> = {};
+      if (result.workouts && result.workouts.length > 0) {
+        for (const workout of result.workouts) {
+          const workoutId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const workoutRef = doc(db, 'users', user.uid, 'workouts', workoutId);
+          
+          await setDoc(workoutRef, {
+            ...workout,
+            id: workoutId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            aiGenerated: true,
+          });
+          
+          // Map workout name to ID for schedule
+          workoutIdMap[workout.name] = workoutId;
+        }
+
+        // Apply schedule if provided
+        if (result.schedule && user) {
+          const plannerRef = doc(db, 'users', user.uid, 'planner', weekStart);
+          const currentDays: Record<string, string> = {};
+          const existing = planner ?? ({} as PlannerDays);
+          plannerDayKeys.forEach((key) => {
+            const value = existing[key];
+            if (value) {
+              currentDays[key] = value;
+            }
+          });
+
+          // Map schedule to workout IDs using the saved IDs
+          Object.entries(result.schedule).forEach(([day, workoutName]) => {
+            const workoutId = workoutIdMap[workoutName];
+            if (workoutId) {
+              currentDays[day as keyof PlannerDays] = workoutId;
+            }
+          });
+
+          await setDoc(
+            plannerRef,
+            {
+              days: currentDays,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+
+        Alert.alert(
+          'Success!',
+          `Generated ${result.workouts.length} workout${result.workouts.length > 1 ? 's' : ''}. Check your workouts tab!`
+        );
+      }
+    } catch (error: any) {
+      console.error('AI workout generation error:', error);
+      Alert.alert('Error', error.message || 'Failed to generate workout program. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const closeBuilder = () => {
     setBuilderVisible(false);
     setBuilderPresetExercise(null);
@@ -611,6 +707,18 @@ export default function TrainingScreen() {
         }}
       >
         <Text style={styles.addButtonText}>Create Workout</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.addButton, styles.secondaryButton, aiGenerating && styles.buttonDisabled]}
+        onPress={handleGenerateAIWorkout}
+        disabled={aiGenerating || !userProfile}
+      >
+        {aiGenerating ? (
+          <ActivityIndicator color={colors.text} size="small" />
+        ) : (
+          <Text style={styles.addButtonText}>🤖 AI Generate Program</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -1060,6 +1168,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   disabledButton: {
     opacity: 0.5,

@@ -17,6 +17,109 @@ export interface ChatCoachResponse {
   text: string;
 }
 
+export interface GenerateWorkoutProgramPayload {
+  profile: {
+    goal?: string;
+    sex?: string;
+    weightKg?: number;
+    heightCm?: number;
+    age?: number;
+    activity?: string;
+  };
+  preferences?: {
+    daysPerWeek?: number;
+    equipment?: string[];
+    focusAreas?: string[];
+    experience?: 'beginner' | 'intermediate' | 'advanced';
+  };
+}
+
+export interface WorkoutExercise {
+  exerciseId: string;
+  name: string;
+  unit: 'kg' | 'lb';
+  targetSets: number;
+  repTarget?: string | null;
+  restSec?: number | null;
+  rpeTarget?: number | null;
+  notes?: string | null;
+}
+
+export interface GeneratedWorkout {
+  name: string;
+  goal?: string | null;
+  tags?: string[];
+  type: 'strength' | 'cardio';
+  exercises?: WorkoutExercise[];
+  cardio?: any | null;
+}
+
+export interface GenerateWorkoutProgramResponse {
+  workouts: GeneratedWorkout[];
+  schedule?: {
+    Mon?: string;
+    Tue?: string;
+    Wed?: string;
+    Thu?: string;
+    Fri?: string;
+    Sat?: string;
+    Sun?: string;
+  };
+}
+
+export interface GenerateMealPlanPayload {
+  profile: {
+    goal?: string;
+    sex?: string;
+    weightKg?: number;
+    heightCm?: number;
+    age?: number;
+    activity?: string;
+  };
+  targets: {
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatsG: number;
+  };
+  preferences?: {
+    dietaryRestrictions?: string[];
+    mealCount?: number;
+    cuisinePreferences?: string[];
+  };
+}
+
+export interface MealPlanMeal {
+  name: string;
+  time: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatsG: number;
+  ingredients?: string[];
+  instructions?: string;
+}
+
+export interface MealPlanDay {
+  meals: MealPlanMeal[];
+}
+
+export interface GenerateMealPlanResponse {
+  plan: {
+    Mon: MealPlanDay;
+    Tue: MealPlanDay;
+    Wed: MealPlanDay;
+    Thu: MealPlanDay;
+    Fri: MealPlanDay;
+    Sat: MealPlanDay;
+    Sun: MealPlanDay;
+  };
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFats: number;
+}
+
 /**
  * Call the chatCoach Firebase callable function
  * @param payload - Chat payload with messages, tier, profile, and targets
@@ -36,6 +139,46 @@ export async function callChatCoach(payload: ChatCoachPayload): Promise<string> 
     
     // Extract more detailed error message
     const errorMessage = error.message || error.details?.message || 'Failed to get response from chat coach';
+    throw new Error(errorMessage);
+  }
+}
+
+/**
+ * Generate AI workout program
+ * @param payload - User profile and preferences
+ * @returns Generated workout program with workouts and schedule
+ */
+export async function generateWorkoutProgram(payload: GenerateWorkoutProgramPayload): Promise<GenerateWorkoutProgramResponse> {
+  try {
+    const generateWorkout = httpsCallable<GenerateWorkoutProgramPayload, GenerateWorkoutProgramResponse>(
+      functions,
+      'generateWorkoutProgram'
+    );
+    const result = await generateWorkout(payload);
+    return result.data;
+  } catch (error: any) {
+    console.error('Generate workout program error:', error);
+    const errorMessage = error.message || error.details?.message || 'Failed to generate workout program';
+    throw new Error(errorMessage);
+  }
+}
+
+/**
+ * Generate AI meal plan
+ * @param payload - User profile, targets, and preferences
+ * @returns Generated 7-day meal plan
+ */
+export async function generateMealPlan(payload: GenerateMealPlanPayload): Promise<GenerateMealPlanResponse> {
+  try {
+    const generateMeal = httpsCallable<GenerateMealPlanPayload, GenerateMealPlanResponse>(
+      functions,
+      'generateMealPlan'
+    );
+    const result = await generateMeal(payload);
+    return result.data;
+  } catch (error: any) {
+    console.error('Generate meal plan error:', error);
+    const errorMessage = error.message || error.details?.message || 'Failed to generate meal plan';
     throw new Error(errorMessage);
   }
 }
