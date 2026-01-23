@@ -92,7 +92,7 @@ export async function requestHealthPermissions(
       if (!AppleHealthKit) {
         Alert.alert(
           'Development Build Required',
-          'Health app sync requires a custom development build. Please build the app using:\n\nnpx expo run:ios\n\nExpo Go does not support native health modules.',
+          'Health app sync requires a development build with HealthKit enabled. Please rebuild the app using EAS Build:\n\nnpx eas-cli build --platform ios --profile development\n\nThen install the new build on your device.',
           [{ text: 'OK' }]
         );
         return false;

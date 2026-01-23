@@ -12,7 +12,8 @@ import FoodScannerModal from '../(modals)/food-scanner';
 import FoodConfirmModal from '../(modals)/food-confirm';
 import PresetMealPlansModal from '../(modals)/preset-meal-plans';
 import type { FoodItem } from '../../src/lib/food';
-import { generateMealPlan, GenerateMealPlanPayload } from '../../src/lib/functions';
+import { generateMealPlan, GenerateMealPlanPayload, GenerateMealPlanResponse } from '../../src/lib/functions';
+import { addDaysISO } from '../../src/utils/date';
 
 interface Targets {
   calories: number;
@@ -53,6 +54,9 @@ export default function MealPlanScreen() {
   const [fatsG, setFatsG] = useState('');
   const [saving, setSaving] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [generatedMealPlan, setGeneratedMealPlan] = useState<GenerateMealPlanResponse | null>(null);
+  const [generatedPlanVisible, setGeneratedPlanVisible] = useState(false);
+  const [applyingPlan, setApplyingPlan] = useState(false);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -188,12 +192,9 @@ export default function MealPlanScreen() {
 
       const result = await generateMealPlan(payload);
       
-      // Show success message with option to view plan
-      Alert.alert(
-        'Meal Plan Generated!',
-        `A 7-day meal plan has been generated matching your targets. You can now add meals manually or ask Jim in chat for meal suggestions.`,
-        [{ text: 'OK' }]
-      );
+      // Show modal to review and apply the generated plan
+      setGeneratedMealPlan(result);
+      setGeneratedPlanVisible(true);
     } catch (error: any) {
       console.error('AI meal plan generation error:', error);
       Alert.alert('Error', error.message || 'Failed to generate meal plan. Please try again.');
@@ -580,6 +581,119 @@ export default function MealPlanScreen() {
           }}
         />
       )}
+
+      {/* AI Generated Meal Plan Modal */}
+      {user && generatedMealPlan && (
+        <Modal visible={generatedPlanVisible} transparent animationType="slide" onRequestClose={() => setGeneratedPlanVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>AI Generated Meal Plan</Text>
+                <TouchableOpacity onPress={() => setGeneratedPlanVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.planScrollView}>
+                <View style={styles.planSummary}>
+                  <Text style={styles.summaryTitle}>Weekly Totals</Text>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryText}>{generatedMealPlan.totalCalories} cal</Text>
+                    <Text style={styles.summaryText}>{generatedMealPlan.totalProtein}g P</Text>
+                    <Text style={styles.summaryText}>{generatedMealPlan.totalCarbs}g C</Text>
+                    <Text style={styles.summaryText}>{generatedMealPlan.totalFats}g F</Text>
+                  </View>
+                </View>
+
+                {Object.entries(generatedMealPlan.plan).map(([day, dayMeals]) => (
+                  <View key={day} style={styles.daySection}>
+                    <Text style={styles.dayTitle}>{day}</Text>
+                    {dayMeals.meals.map((meal, idx) => (
+                      <View key={idx} style={styles.mealItem}>
+                        <View style={styles.mealHeader}>
+                          <Text style={styles.mealName}>{meal.name}</Text>
+                          <Text style={styles.mealTime}>{meal.time}</Text>
+                        </View>
+                        <Text style={styles.mealMacros}>
+                          {meal.calories} cal • {meal.proteinG}g P • {meal.carbsG}g C • {meal.fatsG}g F
+                        </Text>
+                        {meal.ingredients && meal.ingredients.length > 0 && (
+                          <View style={styles.ingredientsList}>
+                            <Text style={styles.ingredientsTitle}>Ingredients:</Text>
+                            {meal.ingredients.map((ing, i) => (
+                              <Text key={i} style={styles.ingredientItem}>
+                                • {ing.name}: {ing.amount} {ing.unit || ''}
+                              </Text>
+                            ))}
+                          </View>
+                        )}
+                        {meal.instructions && (
+                          <Text style={styles.instructionsText}>
+                            <Text style={styles.instructionsLabel}>Instructions: </Text>
+                            {meal.instructions}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setGeneratedPlanVisible(false)}
+                >
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSave, applyingPlan && styles.modalButtonDisabled]}
+                  onPress={async () => {
+                    if (!user || !generatedMealPlan) return;
+                    setApplyingPlan(true);
+                    try {
+                      const today = todayISO();
+                      for (let i = 0; i < 7; i++) {
+                        const dateISO = addDaysISO(today, i);
+                        const dayKey = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i] as keyof typeof generatedMealPlan.plan;
+                        const dayMeals = generatedMealPlan.plan[dayKey];
+
+                        for (const meal of dayMeals.meals) {
+                          await addDoc(collection(db, 'users', user.uid, 'meals', dateISO, 'entries'), {
+                            label: meal.name,
+                            calories: meal.calories,
+                            proteinG: meal.proteinG,
+                            carbsG: meal.carbsG,
+                            fatsG: meal.fatsG,
+                            ingredients: meal.ingredients || null,
+                            instructions: meal.instructions || null,
+                            createdAt: serverTimestamp(),
+                          });
+                        }
+                      }
+                      setGeneratedPlanVisible(false);
+                      setGeneratedMealPlan(null);
+                      Alert.alert('Success', 'Meal plan applied for the next 7 days!');
+                    } catch (error: any) {
+                      console.error('Error applying meal plan:', error);
+                      Alert.alert('Error', 'Failed to apply meal plan. Please try again.');
+                    } finally {
+                      setApplyingPlan(false);
+                    }
+                  }}
+                  disabled={applyingPlan}
+                >
+                  {applyingPlan ? (
+                    <ActivityIndicator color={colors.text} size="small" />
+                  ) : (
+                    <Text style={styles.modalButtonSaveText}>Apply Plan</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -892,5 +1006,112 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  planScrollView: {
+    maxHeight: '70%',
+  },
+  planSummary: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  summaryText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  daySection: {
+    marginBottom: 24,
+  },
+  dayTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.accent,
+    marginBottom: 12,
+  },
+  mealItem: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  mealHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  mealTime: {
+    fontSize: 14,
+    color: colors.textDim,
+  },
+  mealMacros: {
+    fontSize: 13,
+    color: colors.textDim,
+    marginBottom: 12,
+  },
+  ingredientsList: {
+    marginBottom: 8,
+  },
+  ingredientsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  ingredientItem: {
+    fontSize: 13,
+    color: colors.textDim,
+    marginLeft: 8,
+    marginBottom: 4,
+  },
+  instructionsText: {
+    fontSize: 13,
+    color: colors.textDim,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  instructionsLabel: {
+    fontWeight: '600',
+    color: colors.text,
+    fontStyle: 'normal',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
   },
 });

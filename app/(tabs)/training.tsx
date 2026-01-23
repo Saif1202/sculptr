@@ -45,7 +45,7 @@ import WorkoutBuilderModal from '../(modals)/workout-builder';
 import StartSessionModal from '../(modals)/start-session';
 import SessionHistoryModal, { SessionHistoryItem } from '../(modals)/session-history';
 import { calcAge } from '../../src/logic/nutrition';
-import { generateWorkoutProgram, GenerateWorkoutProgramPayload } from '../../src/lib/functions';
+import { generateWorkoutProgram, GenerateWorkoutProgramPayload, GeneratedWorkout } from '../../src/lib/functions';
 
 type TabKey = 'library' | 'workouts' | 'schedule';
 
@@ -149,6 +149,12 @@ export default function TrainingScreen() {
   
   const [aiGenerating, setAiGenerating] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [workoutPrefsVisible, setWorkoutPrefsVisible] = useState(false);
+  const [workoutDaysPerWeek, setWorkoutDaysPerWeek] = useState(4);
+  const [workoutExperience, setWorkoutExperience] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
+  const [generatedWorkouts, setGeneratedWorkouts] = useState<GeneratedWorkout[]>([]);
+  const [workoutSelectionVisible, setWorkoutSelectionVisible] = useState(false);
+  const [selectedWorkoutSchedule, setSelectedWorkoutSchedule] = useState<Record<string, string>>({});
 
   const requestedTab = Array.isArray(tab) ? tab[0] : tab;
   const displayedWorkouts = useMemo(() => (workouts.length ? workouts : localWorkouts), [workouts, localWorkouts]);
@@ -467,12 +473,18 @@ export default function TrainingScreen() {
     }
   };
 
-  const handleGenerateAIWorkout = async () => {
+  const handleGenerateAIWorkout = () => {
     if (!user || !userProfile) {
       Alert.alert('Profile Required', 'Please complete your profile first to generate AI workouts.');
       return;
     }
+    setWorkoutPrefsVisible(true);
+  };
 
+  const handleGenerateWithPrefs = async () => {
+    if (!user || !userProfile) return;
+    
+    setWorkoutPrefsVisible(false);
     setAiGenerating(true);
     try {
       const payload: GenerateWorkoutProgramPayload = {
@@ -485,72 +497,97 @@ export default function TrainingScreen() {
           activity: userProfile.activity,
         },
         preferences: {
-          daysPerWeek: 4,
-          experience: 'intermediate',
+          daysPerWeek: workoutDaysPerWeek,
+          experience: workoutExperience,
         },
       };
 
       const result = await generateWorkoutProgram(payload);
       
-      // Save generated workouts and track IDs
-      const workoutIdMap: Record<string, string> = {};
       if (result.workouts && result.workouts.length > 0) {
-        for (const workout of result.workouts) {
-          const workoutId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          const workoutRef = doc(db, 'users', user.uid, 'workouts', workoutId);
-          
-          await setDoc(workoutRef, {
-            ...workout,
-            id: workoutId,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            aiGenerated: true,
-          });
-          
-          // Map workout name to ID for schedule
-          workoutIdMap[workout.name] = workoutId;
-        }
-
-        // Apply schedule if provided
-        if (result.schedule && user) {
-          const plannerRef = doc(db, 'users', user.uid, 'planner', weekStart);
-          const currentDays: Record<string, string> = {};
-          const existing = planner ?? ({} as PlannerDays);
-          plannerDayKeys.forEach((key) => {
-            const value = existing[key];
-            if (value) {
-              currentDays[key] = value;
-            }
-          });
-
-          // Map schedule to workout IDs using the saved IDs
+        setGeneratedWorkouts(result.workouts);
+        // Initialize schedule with AI suggestions or empty
+        const initialSchedule: Record<string, string> = {};
+        if (result.schedule) {
           Object.entries(result.schedule).forEach(([day, workoutName]) => {
-            const workoutId = workoutIdMap[workoutName];
-            if (workoutId) {
-              currentDays[day as keyof PlannerDays] = workoutId;
+            const workout = result.workouts.find(w => w.name === workoutName);
+            if (workout) {
+              initialSchedule[day] = workout.name;
             }
           });
-
-          await setDoc(
-            plannerRef,
-            {
-              days: currentDays,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
         }
-
-        Alert.alert(
-          'Success!',
-          `Generated ${result.workouts.length} workout${result.workouts.length > 1 ? 's' : ''}. Check your workouts tab!`
-        );
+        setSelectedWorkoutSchedule(initialSchedule);
+        setWorkoutSelectionVisible(true);
+      } else {
+        Alert.alert('Error', 'No workouts were generated. Please try again.');
       }
     } catch (error: any) {
       console.error('AI workout generation error:', error);
       Alert.alert('Error', error.message || 'Failed to generate workout program. Please try again.');
     } finally {
       setAiGenerating(false);
+    }
+  };
+
+  const handleApplyWorkoutSchedule = async () => {
+    if (!user || generatedWorkouts.length === 0) return;
+
+    try {
+      // Save generated workouts and track IDs
+      const workoutIdMap: Record<string, string> = {};
+      for (const workout of generatedWorkouts) {
+        const workoutId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const workoutRef = doc(db, 'users', user.uid, 'workouts', workoutId);
+        
+        await setDoc(workoutRef, {
+          ...workout,
+          id: workoutId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          aiGenerated: true,
+        });
+        
+        workoutIdMap[workout.name] = workoutId;
+      }
+
+      // Apply selected schedule
+      const plannerRef = doc(db, 'users', user.uid, 'planner', weekStart);
+      const currentDays: Record<string, string> = {};
+      const existing = planner ?? ({} as PlannerDays);
+      plannerDayKeys.forEach((key) => {
+        const value = existing[key];
+        if (value) {
+          currentDays[key] = value;
+        }
+      });
+
+      // Map selected schedule to workout IDs
+      Object.entries(selectedWorkoutSchedule).forEach(([day, workoutName]) => {
+        const workoutId = workoutIdMap[workoutName];
+        if (workoutId) {
+          currentDays[day as keyof PlannerDays] = workoutId;
+        }
+      });
+
+      await setDoc(
+        plannerRef,
+        {
+          days: currentDays,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setWorkoutSelectionVisible(false);
+      setGeneratedWorkouts([]);
+      setSelectedWorkoutSchedule({});
+      Alert.alert(
+        'Success!',
+        `Generated ${generatedWorkouts.length} workout${generatedWorkouts.length > 1 ? 's' : ''} and scheduled them!`
+      );
+    } catch (error: any) {
+      console.error('Error applying workout schedule:', error);
+      Alert.alert('Error', 'Failed to save workouts. Please try again.');
     }
   };
 
@@ -1031,6 +1068,108 @@ export default function TrainingScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Workout Preferences Modal */}
+      <Modal visible={workoutPrefsVisible} transparent animationType="slide" onRequestClose={() => setWorkoutPrefsVisible(false)}>
+        <View style={styles.assignOverlay}>
+          <View style={styles.assignCard}>
+            <Text style={styles.modalTitle}>Workout Preferences</Text>
+            <ScrollView>
+              <Text style={styles.inputLabel}>Days Per Week</Text>
+              <View style={styles.chipRow}>
+                {[3, 4, 5, 6].map((days) => (
+                  <TouchableOpacity
+                    key={days}
+                    style={[styles.chip, workoutDaysPerWeek === days && styles.chipActive]}
+                    onPress={() => setWorkoutDaysPerWeek(days)}
+                  >
+                    <Text style={styles.chipText}>{days}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Experience Level</Text>
+              <View style={styles.chipRow}>
+                {(['beginner', 'intermediate', 'advanced'] as const).map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[styles.chip, workoutExperience === level && styles.chipActive]}
+                    onPress={() => setWorkoutExperience(level)}
+                  >
+                    <Text style={styles.chipText}>{level.charAt(0).toUpperCase() + level.slice(1)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => setWorkoutPrefsVisible(false)}>
+                  <Text style={styles.secondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={handleGenerateWithPrefs}>
+                  <Text style={styles.primaryText}>Generate</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Workout Selection & Scheduling Modal */}
+      <Modal visible={workoutSelectionVisible} transparent animationType="slide" onRequestClose={() => setWorkoutSelectionVisible(false)}>
+        <View style={styles.assignOverlay}>
+          <View style={[styles.assignCard, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Schedule Your Workouts</Text>
+            <Text style={[styles.inputLabel, { marginBottom: 16 }]}>Select workouts for each day:</Text>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {plannerDayKeys.map((day) => (
+                <View key={day} style={styles.scheduleDayRow}>
+                  <Text style={styles.dayLabel}>{day}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.workoutPicker}>
+                    <TouchableOpacity
+                      style={[
+                        styles.workoutOption,
+                        !selectedWorkoutSchedule[day] && styles.workoutOptionSelected,
+                      ]}
+                      onPress={() => {
+                        const newSchedule = { ...selectedWorkoutSchedule };
+                        delete newSchedule[day];
+                        setSelectedWorkoutSchedule(newSchedule);
+                      }}
+                    >
+                      <Text style={styles.workoutOptionText}>None</Text>
+                    </TouchableOpacity>
+                    {generatedWorkouts.map((workout) => (
+                      <TouchableOpacity
+                        key={workout.name}
+                        style={[
+                          styles.workoutOption,
+                          selectedWorkoutSchedule[day] === workout.name && styles.workoutOptionSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedWorkoutSchedule({
+                            ...selectedWorkoutSchedule,
+                            [day]: workout.name,
+                          });
+                        }}
+                      >
+                        <Text style={styles.workoutOptionText}>{workout.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => setWorkoutSelectionVisible(false)}>
+                <Text style={styles.secondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={handleApplyWorkoutSchedule}>
+                <Text style={styles.primaryText}>Apply Schedule</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1398,6 +1537,33 @@ const styles = StyleSheet.create({
   optionMeta: {
     color: colors.textDim,
     fontSize: 13,
+  },
+  scheduleDayRow: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  workoutPicker: {
+    marginTop: 8,
+  },
+  workoutOption: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    backgroundColor: colors.card,
+  },
+  workoutOptionSelected: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  workoutOptionText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
 

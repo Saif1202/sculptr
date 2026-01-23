@@ -96,7 +96,11 @@ export interface MealPlanMeal {
   proteinG: number;
   carbsG: number;
   fatsG: number;
-  ingredients?: string[];
+  ingredients?: Array<{
+    name: string;
+    amount: string;
+    unit?: string;
+  }>;
   instructions?: string;
 }
 

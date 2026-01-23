@@ -104,7 +104,11 @@ interface MealPlanDay {
     proteinG: number;
     carbsG: number;
     fatsG: number;
-    ingredients?: string[];
+    ingredients?: Array<{
+      name: string;
+      amount: string;
+      unit?: string;
+    }>;
     instructions?: string;
   }>;
 }
@@ -314,23 +318,56 @@ export const generateWorkoutProgram = onCall(
     try {
       const client = getOpenAIClient();
       
-      const systemPrompt = `You are an expert fitness coach. Generate a workout program as JSON:
+      const systemPrompt = `You are an expert fitness coach. Generate a comprehensive workout program as JSON:
 {
-  "workouts": [{"name": "Workout Name", "goal": "Fat Loss"|"Muscle Gain"|"Strength & Conditioning"|"Maintenance"|null, "tags": ["tag1"], "type": "strength"|"cardio", "exercises": [{"exerciseId": "id", "name": "Exercise", "unit": "kg"|"lb", "targetSets": 3, "repTarget": "8-12"|null, "restSec": 90|null, "rpeTarget": 7|null, "notes": null}], "cardio": null}],
-  "schedule": {"Mon": "workout-name", "Tue": "workout-name"}
+  "workouts": [
+    {
+      "name": "Workout Name (e.g., 'Upper Body Strength', 'Leg Day', 'Full Body')",
+      "goal": "Fat Loss"|"Muscle Gain"|"Strength & Conditioning"|"Maintenance"|null,
+      "tags": ["tag1", "tag2"],
+      "type": "strength"|"cardio",
+      "exercises": [
+        {
+          "exerciseId": "unique-id",
+          "name": "Exercise Name (use common, recognizable names like 'Bench Press', 'Squat', 'Deadlift')",
+          "unit": "kg"|"lb",
+          "targetSets": 3-5,
+          "repTarget": "8-12"|"12-15"|"4-6"|null,
+          "restSec": 60-180,
+          "rpeTarget": 7-9|null,
+          "notes": "Optional form tips"|null
+        }
+      ],
+      "cardio": null
+    }
+  ],
+  "schedule": {
+    "Mon": "workout-name",
+    "Tue": "workout-name",
+    ...
+  }
 }
-Rules: 3-6 workouts, 4-8 exercises per strength workout. Rep ranges: Fat Loss 12-15, Muscle Gain 8-12, Strength 4-6. Rest 60-180s. Use common exercise names.`;
+Rules:
+- Create 3-6 unique workouts based on user preferences
+- For strength workouts: 4-8 exercises targeting different muscle groups
+- Rep ranges: Fat Loss (12-15), Muscle Gain (8-12), Strength (4-6), Maintenance (8-12)
+- Rest periods: 60-180 seconds based on intensity
+- Use REAL, COMMON exercise names (Bench Press, Squat, Deadlift, Pull-ups, etc.)
+- Create balanced weekly schedule matching daysPerWeek preference
+- Include variety: upper body, lower body, full body, cardio days
+- Tag workouts appropriately (e.g., ["Upper Body", "Push"], ["Lower Body", "Legs"])`;
 
-      const userPrompt = `Create a workout program for:
+      const userPrompt = `Create a personalized workout program for:
 Goal: ${data.profile.goal || 'Not specified'}
 Sex: ${data.profile.sex || 'Not specified'}
 Weight: ${data.profile.weightKg || 'Not specified'} kg
 Height: ${data.profile.heightCm || 'Not specified'} cm
 Age: ${data.profile.age || 'Not specified'}
 Activity Level: ${data.profile.activity || 'Not specified'}
-${data.preferences ? `Preferences: ${JSON.stringify(data.preferences)}` : ''}
+Days Per Week: ${data.preferences?.daysPerWeek || 4}
+Experience Level: ${data.preferences?.experience || 'intermediate'}
 
-Generate a complete program with workouts and weekly schedule.`;
+Generate ${data.preferences?.daysPerWeek || 4} workouts with a complete weekly schedule. Use real exercise names and create a balanced program.`;
 
       const completion = await client.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -396,12 +433,35 @@ export const generateMealPlan = onCall(
       const systemPrompt = `You are an expert nutritionist. Generate a 7-day meal plan as JSON:
 {
   "plan": {
-    "Mon": {"meals": [{"name": "Meal", "time": "08:00", "calories": 500, "proteinG": 30, "carbsG": 50, "fatsG": 20, "ingredients": ["ingredient"], "instructions": "instructions"}]},
+    "Mon": {
+      "meals": [{
+        "name": "Meal Name",
+        "time": "08:00",
+        "calories": 500,
+        "proteinG": 30,
+        "carbsG": 50,
+        "fatsG": 20,
+        "ingredients": [
+          {"name": "Ingredient name", "amount": "150", "unit": "g"},
+          {"name": "Another ingredient", "amount": "2", "unit": "tbsp"}
+        ],
+        "instructions": "Detailed cooking instructions"
+      }]
+    },
     "Tue": {...}, "Wed": {...}, "Thu": {...}, "Fri": {...}, "Sat": {...}, "Sun": {...}
   },
-  "totalCalories": 2000, "totalProtein": 150, "totalCarbs": 200, "totalFats": 65
+  "totalCalories": 2000,
+  "totalProtein": 150,
+  "totalCarbs": 200,
+  "totalFats": 65
 }
-Rules: 3-5 meals/day. Match daily targets ±5%. Use common foods. Include ingredients and instructions.`;
+Rules:
+- 3-5 meals per day (breakfast, lunch, dinner, snacks)
+- Match daily targets exactly (±2% tolerance)
+- Include detailed ingredients with exact amounts and units (g, ml, tbsp, tsp, whole, etc.)
+- Provide clear cooking instructions for each meal
+- Use realistic, common foods
+- Ensure variety across the week`;
 
       const userPrompt = `Create a 7-day meal plan for:
 Goal: ${data.profile.goal || 'Not specified'}
@@ -417,7 +477,7 @@ Generate a complete weekly meal plan that matches the targets.`;
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 2000, // Reduced to speed up generation
+        max_tokens: 3000, // Increased for detailed meal plans with ingredients
         response_format: { type: 'json_object' },
       });
 
