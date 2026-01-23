@@ -166,6 +166,11 @@ export async function generateWorkoutProgram(payload: GenerateWorkoutProgramPayl
       throw new Error('AI workout generation is not available yet. Please deploy Firebase Functions or use the preset plans.');
     }
     
+    // Handle timeout/deadline errors
+    if (error.code === 'deadline-exceeded' || error.message?.includes('deadline') || error.message?.includes('timeout')) {
+      throw new Error('Workout generation timed out. Please try again or use preset workouts.');
+    }
+    
     const errorMessage = error.message || error.details?.message || 'Failed to generate workout program';
     throw new Error(errorMessage);
   }
@@ -192,6 +197,11 @@ export async function generateMealPlan(payload: GenerateMealPlanPayload): Promis
     // Handle function not found error
     if (error.code === 'not-found' || error.message?.includes('not found') || error.message?.includes('NOT_FOUND')) {
       throw new Error('AI meal plan generation is not available yet. Please deploy Firebase Functions or use the preset plans.');
+    }
+    
+    // Handle timeout/deadline errors
+    if (error.code === 'deadline-exceeded' || error.message?.includes('deadline') || error.message?.includes('timeout')) {
+      throw new Error('Meal plan generation timed out. Please try again or use preset meal plans.');
     }
     
     const errorMessage = error.message || error.details?.message || 'Failed to generate meal plan';

@@ -1044,3 +1044,61 @@ export function getPresetMealPlansByGoal(goal?: string): PresetMealPlan[] {
   if (!goal) return PRESET_MEAL_PLANS;
   return PRESET_MEAL_PLANS.filter((plan) => plan.goal === goal);
 }
+
+export interface UserTargets {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatsG: number;
+}
+
+/**
+ * Scale a preset meal plan to match user's target calories and macros
+ * Maintains the same meal structure and proportions, but scales all values
+ */
+export function scalePresetMealPlan(plan: PresetMealPlan, userTargets: UserTargets): PresetMealPlan {
+  // Calculate scaling factors for each macro
+  const calorieScale = userTargets.calories / plan.totalCalories;
+  const proteinScale = userTargets.proteinG / plan.totalProtein;
+  const carbsScale = userTargets.carbsG / plan.totalCarbs;
+  const fatsScale = userTargets.fatsG / plan.totalFats;
+
+  // Scale each day's meals
+  const scaledPlan: PresetMealPlan = {
+    ...plan,
+    plan: {
+      Mon: scaleDay(plan.plan.Mon, calorieScale, proteinScale, carbsScale, fatsScale),
+      Tue: scaleDay(plan.plan.Tue, calorieScale, proteinScale, carbsScale, fatsScale),
+      Wed: scaleDay(plan.plan.Wed, calorieScale, proteinScale, carbsScale, fatsScale),
+      Thu: scaleDay(plan.plan.Thu, calorieScale, proteinScale, carbsScale, fatsScale),
+      Fri: scaleDay(plan.plan.Fri, calorieScale, proteinScale, carbsScale, fatsScale),
+      Sat: scaleDay(plan.plan.Sat, calorieScale, proteinScale, carbsScale, fatsScale),
+      Sun: scaleDay(plan.plan.Sun, calorieScale, proteinScale, carbsScale, fatsScale),
+    },
+    totalCalories: userTargets.calories,
+    totalProtein: userTargets.proteinG,
+    totalCarbs: userTargets.carbsG,
+    totalFats: userTargets.fatsG,
+  };
+
+  return scaledPlan;
+}
+
+function scaleDay(
+  day: PresetMealPlanDay,
+  calorieScale: number,
+  proteinScale: number,
+  carbsScale: number,
+  fatsScale: number
+): PresetMealPlanDay {
+  return {
+    meals: day.meals.map((meal) => ({
+      ...meal,
+      calories: Math.round(meal.calories * calorieScale),
+      proteinG: Math.round(meal.proteinG * proteinScale * 10) / 10, // Round to 1 decimal
+      carbsG: Math.round(meal.carbsG * carbsScale * 10) / 10,
+      fatsG: Math.round(meal.fatsG * fatsScale * 10) / 10,
+      // Keep ingredients and instructions as-is (they're qualitative)
+    })),
+  };
+}

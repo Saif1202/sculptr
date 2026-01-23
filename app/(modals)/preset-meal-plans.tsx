@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../src/theme';
-import { PRESET_MEAL_PLANS, PresetMealPlan, getPresetMealPlansByGoal } from '../../src/lib/presetMealPlans';
+import { PRESET_MEAL_PLANS, PresetMealPlan, getPresetMealPlansByGoal, scalePresetMealPlan } from '../../src/lib/presetMealPlans';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../src/lib/firebase';
 import { todayISO, addDaysISO } from '../../src/utils/date';
@@ -21,6 +21,12 @@ interface PresetMealPlansModalProps {
   onClose: () => void;
   userId: string;
   userGoal?: string;
+  userTargets?: {
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatsG: number;
+  } | null;
   onPlanApplied?: () => void;
 }
 
@@ -29,12 +35,18 @@ export default function PresetMealPlansModal({
   onClose,
   userId,
   userGoal,
+  userTargets,
   onPlanApplied,
 }: PresetMealPlansModalProps) {
   const [selectedPlan, setSelectedPlan] = useState<PresetMealPlan | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const availablePlans = getPresetMealPlansByGoal(userGoal);
+  const basePlans = getPresetMealPlansByGoal(userGoal);
+  
+  // Scale plans to user targets if available
+  const availablePlans = userTargets
+    ? basePlans.map((plan) => scalePresetMealPlan(plan, userTargets))
+    : basePlans;
 
   const handleApplyPlan = async (plan: PresetMealPlan) => {
     setApplying(true);

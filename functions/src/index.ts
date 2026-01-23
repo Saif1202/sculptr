@@ -158,7 +158,7 @@ function getOpenAIClient(): OpenAI {
     
     return new OpenAI({
       apiKey,
-      timeout: 30000, // 30 second timeout
+      timeout: 60000, // 60 second timeout
       maxRetries: 2,
     });
   } catch (error: any) {
@@ -314,45 +314,12 @@ export const generateWorkoutProgram = onCall(
     try {
       const client = getOpenAIClient();
       
-      const systemPrompt = `You are an expert fitness coach creating personalized workout programs. 
-Generate a complete workout program as JSON with the following structure:
+      const systemPrompt = `You are an expert fitness coach. Generate a workout program as JSON:
 {
-  "workouts": [
-    {
-      "name": "Workout Name",
-      "goal": "Fat Loss" | "Muscle Gain" | "Strength & Conditioning" | "Maintenance" | null,
-      "tags": ["tag1", "tag2"],
-      "type": "strength" | "cardio",
-      "exercises": [
-        {
-          "exerciseId": "unique-id",
-          "name": "Exercise Name",
-          "unit": "kg" | "lb",
-          "targetSets": 3,
-          "repTarget": "8-12" | null,
-          "restSec": 90 | null,
-          "rpeTarget": 7 | null,
-          "notes": "Optional notes" | null
-        }
-      ],
-      "cardio": null
-    }
-  ],
-  "schedule": {
-    "Mon": "workout-id-1",
-    "Tue": "workout-id-2",
-    ...
-  }
+  "workouts": [{"name": "Workout Name", "goal": "Fat Loss"|"Muscle Gain"|"Strength & Conditioning"|"Maintenance"|null, "tags": ["tag1"], "type": "strength"|"cardio", "exercises": [{"exerciseId": "id", "name": "Exercise", "unit": "kg"|"lb", "targetSets": 3, "repTarget": "8-12"|null, "restSec": 90|null, "rpeTarget": 7|null, "notes": null}], "cardio": null}],
+  "schedule": {"Mon": "workout-name", "Tue": "workout-name"}
 }
-
-Rules:
-- Create 3-6 workouts based on user's goal and preferences
-- For strength workouts, include 4-8 exercises targeting different muscle groups
-- Use appropriate rep ranges: Fat Loss (12-15), Muscle Gain (8-12), Strength (4-6)
-- Include proper rest periods (60-180 seconds)
-- Match exercises to available equipment
-- Create a balanced weekly schedule
-- Use exercise names that are common and recognizable`;
+Rules: 3-6 workouts, 4-8 exercises per strength workout. Rep ranges: Fat Loss 12-15, Muscle Gain 8-12, Strength 4-6. Rest 60-180s. Use common exercise names.`;
 
       const userPrompt = `Create a workout program for:
 Goal: ${data.profile.goal || 'Not specified'}
@@ -372,7 +339,7 @@ Generate a complete program with workouts and weekly schedule.`;
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 1500, // Reduced to speed up generation
         response_format: { type: 'json_object' },
       });
 
@@ -385,6 +352,15 @@ Generate a complete program with workouts and weekly schedule.`;
       return parsed;
     } catch (error: any) {
       console.error('Error in generateWorkoutProgram:', error);
+      
+      // Handle timeout errors specifically
+      if (error.message?.includes('timeout') || error.message?.includes('deadline') || error.code === 'deadline-exceeded') {
+        throw new HttpsError(
+          'deadline-exceeded',
+          'Workout generation took too long. Please try again or use preset workouts.'
+        );
+      }
+      
       throw new HttpsError(
         'internal',
         error.message || 'Failed to generate workout program'
@@ -417,40 +393,15 @@ export const generateMealPlan = onCall(
     try {
       const client = getOpenAIClient();
       
-      const systemPrompt = `You are an expert nutritionist creating personalized meal plans. 
-Generate a complete 7-day meal plan as JSON with the following structure:
+      const systemPrompt = `You are an expert nutritionist. Generate a 7-day meal plan as JSON:
 {
   "plan": {
-    "Mon": {
-      "meals": [
-        {
-          "name": "Meal Name",
-          "time": "08:00",
-          "calories": 500,
-          "proteinG": 30,
-          "carbsG": 50,
-          "fatsG": 20,
-          "ingredients": ["ingredient1", "ingredient2"],
-          "instructions": "Cooking instructions"
-        }
-      ]
-    },
-    ... (Tue through Sun)
+    "Mon": {"meals": [{"name": "Meal", "time": "08:00", "calories": 500, "proteinG": 30, "carbsG": 50, "fatsG": 20, "ingredients": ["ingredient"], "instructions": "instructions"}]},
+    "Tue": {...}, "Wed": {...}, "Thu": {...}, "Fri": {...}, "Sat": {...}, "Sun": {...}
   },
-  "totalCalories": 2000,
-  "totalProtein": 150,
-  "totalCarbs": 200,
-  "totalFats": 65
+  "totalCalories": 2000, "totalProtein": 150, "totalCarbs": 200, "totalFats": 65
 }
-
-Rules:
-- Create 3-5 meals per day (breakfast, lunch, dinner, snacks)
-- Total daily macros must match targets closely (±5%)
-- Include variety across the week
-- Use realistic, common foods
-- Provide ingredients and basic cooking instructions
-- Consider dietary restrictions and preferences
-- Ensure meals are balanced and nutritious`;
+Rules: 3-5 meals/day. Match daily targets ±5%. Use common foods. Include ingredients and instructions.`;
 
       const userPrompt = `Create a 7-day meal plan for:
 Goal: ${data.profile.goal || 'Not specified'}
@@ -466,7 +417,7 @@ Generate a complete weekly meal plan that matches the targets.`;
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.7,
-        max_tokens: 3000,
+        max_tokens: 2000, // Reduced to speed up generation
         response_format: { type: 'json_object' },
       });
 
@@ -479,6 +430,15 @@ Generate a complete weekly meal plan that matches the targets.`;
       return parsed;
     } catch (error: any) {
       console.error('Error in generateMealPlan:', error);
+      
+      // Handle timeout errors specifically
+      if (error.message?.includes('timeout') || error.message?.includes('deadline') || error.code === 'deadline-exceeded') {
+        throw new HttpsError(
+          'deadline-exceeded',
+          'Meal plan generation took too long. Please try again or use preset meal plans.'
+        );
+      }
+      
       throw new HttpsError(
         'internal',
         error.message || 'Failed to generate meal plan'

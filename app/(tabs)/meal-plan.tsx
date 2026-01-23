@@ -573,6 +573,7 @@ export default function MealPlanScreen() {
           onClose={() => setPresetPlansVisible(false)}
           userId={user.uid}
           userGoal={profileGoal || undefined}
+          userTargets={targets}
           onPlanApplied={() => {
             // Refresh entries will happen automatically via Firestore listener
             setPresetPlansVisible(false);
