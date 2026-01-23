@@ -53,6 +53,8 @@ export default function PresetMealPlansModal({
             proteinG: meal.proteinG,
             carbsG: meal.carbsG,
             fatsG: meal.fatsG,
+            ingredients: meal.ingredients || null,
+            instructions: meal.instructions || null,
             createdAt: serverTimestamp(),
           });
         }
@@ -105,6 +107,37 @@ export default function PresetMealPlansModal({
                   <Text style={styles.macroText}>{plan.totalCarbs}g C</Text>
                   <Text style={styles.macroText}>{plan.totalFats}g F</Text>
                 </View>
+                {selectedPlan?.id === plan.id && (
+                  <View style={styles.mealDetails}>
+                    <Text style={styles.mealDetailsTitle}>Meal Details:</Text>
+                    {Object.entries(plan.plan).map(([day, dayMeals]) => (
+                      <View key={day} style={styles.daySection}>
+                        <Text style={styles.dayTitle}>{day}</Text>
+                        {dayMeals.meals.map((meal, idx) => (
+                          <View key={idx} style={styles.mealItem}>
+                            <Text style={styles.mealName}>{meal.name} ({meal.time})</Text>
+                            {meal.ingredients && meal.ingredients.length > 0 && (
+                              <View style={styles.ingredientsList}>
+                                <Text style={styles.ingredientsTitle}>Ingredients:</Text>
+                                {meal.ingredients.map((ing, i) => (
+                                  <Text key={i} style={styles.ingredientItem}>
+                                    • {ing.name}: {ing.amount} {ing.unit || ''}
+                                  </Text>
+                                ))}
+                              </View>
+                            )}
+                            {meal.instructions && (
+                              <Text style={styles.instructionsText}>
+                                <Text style={styles.instructionsLabel}>Instructions: </Text>
+                                {meal.instructions}
+                              </Text>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
 
@@ -266,5 +299,64 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  mealDetails: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  mealDetailsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  daySection: {
+    marginBottom: 16,
+  },
+  dayTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.accent,
+    marginBottom: 8,
+  },
+  mealItem: {
+    marginBottom: 12,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+    paddingBottom: 8,
+  },
+  mealName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  ingredientsList: {
+    marginBottom: 6,
+  },
+  ingredientsTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textDim,
+    marginBottom: 4,
+  },
+  ingredientItem: {
+    fontSize: 12,
+    color: colors.textDim,
+    marginLeft: 8,
+    marginBottom: 2,
+  },
+  instructionsText: {
+    fontSize: 12,
+    color: colors.textDim,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  instructionsLabel: {
+    fontWeight: '600',
+    color: colors.text,
   },
 });

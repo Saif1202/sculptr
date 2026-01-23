@@ -131,30 +131,39 @@ const openaiApiKey = defineSecret('OPENAI_API_KEY');
 // Function to get OpenAI client (initialized per request to avoid module-level initialization issues)
 function getOpenAIClient(): OpenAI {
   try {
-    let apiKey = openaiApiKey.value();
-    if (!apiKey) {
+    // Access secret value only when function is called, not at module load time
+    let apiKey: string;
+    try {
+      apiKey = openaiApiKey.value();
+    } catch (secretError: any) {
+      console.error('Error accessing secret:', secretError);
+      throw new Error('OPENAI_API_KEY secret is not configured or accessible');
+    }
+    
+    if (!apiKey || typeof apiKey !== 'string') {
       throw new Error('OPENAI_API_KEY secret is not configured');
     }
     
     // Trim whitespace and newlines that might have been added when setting the secret
     apiKey = apiKey.trim();
     
+    if (apiKey.length === 0) {
+      throw new Error('OPENAI_API_KEY secret is empty');
+    }
+    
     // Validate the API key format
     if (!apiKey.startsWith('sk-')) {
       console.warn('API key does not start with sk-, but continuing anyway');
     }
-    
-    console.log('API key length:', apiKey.length);
-    console.log('API key starts with:', apiKey.substring(0, 7));
     
     return new OpenAI({
       apiKey,
       timeout: 30000, // 30 second timeout
       maxRetries: 2,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error initializing OpenAI client:', error);
-    throw new Error('Failed to initialize OpenAI client. Make sure OPENAI_API_KEY secret is set.');
+    throw new Error(`Failed to initialize OpenAI client: ${error.message || 'Unknown error'}`);
   }
 }
 
