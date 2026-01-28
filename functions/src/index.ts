@@ -322,17 +322,17 @@ export const generateWorkoutProgram = onCall(
 {
   "workouts": [
     {
-      "name": "Workout Name (e.g., 'Upper Body Strength', 'Leg Day', 'Full Body')",
+      "name": "Workout Name (e.g., 'Push Day', 'Pull Day', 'Leg Day', 'Upper Body', 'Lower Body', 'Full Body', 'HIIT', 'Cardio')",
       "goal": "Fat Loss"|"Muscle Gain"|"Strength & Conditioning"|"Maintenance"|null,
       "tags": ["tag1", "tag2"],
       "type": "strength"|"cardio",
       "exercises": [
         {
           "exerciseId": "unique-id",
-          "name": "Exercise Name (use common, recognizable names like 'Bench Press', 'Squat', 'Deadlift')",
+          "name": "Exercise Name (use common, recognizable names like 'Bench Press', 'Squat', 'Deadlift', 'Barbell Row', 'Overhead Press')",
           "unit": "kg"|"lb",
           "targetSets": 3-5,
-          "repTarget": "8-12"|"12-15"|"4-6"|null,
+          "repTarget": "8-12"|"12-15"|"4-6"|"15-20"|null,
           "restSec": 60-180,
           "rpeTarget": 7-9|null,
           "notes": "Optional form tips"|null
@@ -348,14 +348,23 @@ export const generateWorkoutProgram = onCall(
   }
 }
 Rules:
-- Create 3-6 unique workouts based on user preferences
-- For strength workouts: 4-8 exercises targeting different muscle groups
-- Rep ranges: Fat Loss (12-15), Muscle Gain (8-12), Strength (4-6), Maintenance (8-12)
-- Rest periods: 60-180 seconds based on intensity
-- Use REAL, COMMON exercise names (Bench Press, Squat, Deadlift, Pull-ups, etc.)
+- Create 3-6 unique workouts based on user preferences and daysPerWeek
+- Use diverse workout splits:
+  * Push/Pull/Legs (PPL): Push (chest, shoulders, triceps), Pull (back, biceps), Legs (quads, hamstrings, glutes, calves)
+  * Upper/Lower: Upper body focus, Lower body focus
+  * Body Part Splits: Chest & Triceps, Back & Biceps, Shoulders & Legs, etc.
+  * Full Body: Compound movements targeting multiple muscle groups
+  * Cardio/HIIT: High-intensity interval training or steady-state cardio
+- For strength workouts: 4-8 exercises targeting the specified muscle groups
+- Rep ranges: Fat Loss (12-15), Muscle Gain (8-12), Strength (4-6), Maintenance (8-12), Endurance (15-20)
+- Rest periods: 60-180 seconds based on intensity (shorter for higher reps, longer for strength)
+- Use REAL, COMMON exercise names (Bench Press, Squat, Deadlift, Pull-ups, Barbell Row, Overhead Press, etc.)
 - Create balanced weekly schedule matching daysPerWeek preference
-- Include variety: upper body, lower body, full body, cardio days
-- Tag workouts appropriately (e.g., ["Upper Body", "Push"], ["Lower Body", "Legs"])`;
+- Distribute workouts evenly across the week with rest days
+- Tag workouts appropriately (e.g., ["Push", "Upper Body"], ["Pull", "Back"], ["Legs", "Lower Body"], ["HIIT", "Cardio"])
+- For 3 days/week: Use Full Body or Upper/Lower split
+- For 4 days/week: Use Upper/Lower or Push/Pull split
+- For 5-6 days/week: Use Push/Pull/Legs or body part split`;
 
       const userPrompt = `Create a personalized workout program for:
 Goal: ${data.profile.goal || 'Not specified'}
@@ -487,7 +496,36 @@ Generate a complete weekly meal plan that matches the targets.`;
       }
 
       const parsed = JSON.parse(responseText) as GenerateMealPlanResponse;
-      return parsed;
+      
+      // Normalize ingredients format - handle both string arrays and object arrays
+      const normalizedPlan = {
+        ...parsed,
+        plan: Object.entries(parsed.plan).reduce((acc, [day, dayMeals]) => {
+          acc[day as keyof typeof parsed.plan] = {
+            meals: dayMeals.meals.map((meal) => {
+              // Convert string array ingredients to object array if needed
+              let normalizedIngredients = meal.ingredients;
+              if (Array.isArray(meal.ingredients) && meal.ingredients.length > 0) {
+                if (typeof meal.ingredients[0] === 'string') {
+                  // Convert string array to object array
+                  normalizedIngredients = (meal.ingredients as string[]).map((ing) => ({
+                    name: ing,
+                    amount: '',
+                    unit: '',
+                  }));
+                }
+              }
+              return {
+                ...meal,
+                ingredients: normalizedIngredients,
+              };
+            }),
+          };
+          return acc;
+        }, {} as typeof parsed.plan),
+      };
+      
+      return normalizedPlan;
     } catch (error: any) {
       console.error('Error in generateMealPlan:', error);
       

@@ -35,13 +35,14 @@
         "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
+      "predictiveBackGestureEnabled": true,
       "permissions": [
         "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"

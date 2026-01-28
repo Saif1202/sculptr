@@ -41,7 +41,13 @@ export default function PresetMealPlansModal({
   const [selectedPlan, setSelectedPlan] = useState<PresetMealPlan | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const basePlans = getPresetMealPlansByGoal(userGoal);
+  // Show all plans, but prioritize user's goal if set
+  const allPlans = PRESET_MEAL_PLANS;
+  const userGoalPlans = userGoal ? getPresetMealPlansByGoal(userGoal) : [];
+  const otherPlans = userGoal ? allPlans.filter((plan) => plan.goal !== userGoal) : allPlans;
+  
+  // Combine: user goal plans first, then others
+  const basePlans = [...userGoalPlans, ...otherPlans];
   
   // Scale plans to user targets if available
   const availablePlans = userTargets

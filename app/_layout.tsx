@@ -53,7 +53,7 @@ export default function RootLayout() {
         try {
           // Initialize RevenueCat
           try {
-            await initPurchases(user.uid, Platform.OS as 'ios' | 'android');
+            await initPurchases(user.uid);
             // Sync tier from RevenueCat to Firestore
             await syncTierToFirestore(user.uid);
           } catch (error) {

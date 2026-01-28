@@ -181,16 +181,29 @@ export default function WorkoutBuilderModal({
     }
   }, [workoutType, cardioPlan, resolvedAge]);
 
-  const fuse = useMemo(() => new Fuse(availableExercises, {
+  const safeExercises = useMemo(() => (availableExercises ?? []).map((ex) => ({
+    id: ex?.id ?? '',
+    name: ex?.name ?? 'Exercise',
+    muscles: Array.isArray(ex?.muscles) ? ex.muscles : [],
+    equipment: ex?.equipment ?? 'Other',
+    movement: ex?.movement ?? 'Compound',
+    unit: ex?.unit ?? 'kg',
+  })), [availableExercises]);
+
+  const fuse = useMemo(() => new Fuse(safeExercises, {
     keys: ['name', 'muscles', 'equipment'],
     threshold: 0.3,
     ignoreLocation: true,
-  }), [availableExercises]);
+  }), [safeExercises]);
 
   const filteredExercises = useMemo(() => {
-    if (!search.trim()) return availableExercises;
-    return fuse.search(search.trim()).map((res) => res.item);
-  }, [availableExercises, fuse, search]);
+    if (!search.trim()) return safeExercises;
+    try {
+      return fuse.search(search.trim()).map((res) => res.item);
+    } catch {
+      return safeExercises;
+    }
+  }, [safeExercises, fuse, search]);
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));

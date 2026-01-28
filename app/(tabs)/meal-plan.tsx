@@ -298,7 +298,14 @@ export default function MealPlanScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Meal Plan</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Meal Plan</Text>
+            {targets && (
+              <Text style={styles.subtitle}>
+                Target: {Math.round(targets.calories)} cal • {Math.round(targets.proteinG)}g P • {Math.round(targets.carbsG)}g C • {Math.round(targets.fatsG)}g F
+              </Text>
+            )}
+          </View>
           <TouchableOpacity
             style={[styles.aiButton, aiGenerating && styles.aiButtonDisabled]}
             onPress={handleGenerateAIMealPlan}
@@ -308,7 +315,8 @@ export default function MealPlanScreen() {
               <ActivityIndicator color={colors.text} size="small" />
             ) : (
               <>
-                <Text style={styles.aiButtonText}>🤖 AI Plan</Text>
+                <Ionicons name="sparkles" size={16} color={colors.text} style={{ marginRight: 4 }} />
+                <Text style={styles.aiButtonText}>AI Plan</Text>
               </>
             )}
           </TouchableOpacity>
@@ -409,12 +417,15 @@ export default function MealPlanScreen() {
         {/* Library Buttons */}
         <View style={styles.libraryButtons}>
           <TouchableOpacity style={styles.libraryButton} onPress={() => setShowFoodSearch(true)}>
+            <Ionicons name="library-outline" size={18} color={colors.text} style={{ marginRight: 6 }} />
             <Text style={styles.libraryButtonText}>Food Library</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.libraryButton} onPress={() => setShowScanner(true)}>
+            <Ionicons name="scan-outline" size={18} color={colors.text} style={{ marginRight: 6 }} />
             <Text style={styles.libraryButtonText}>Scan Barcode</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.libraryButton} onPress={() => setPresetPlansVisible(true)}>
+            <Ionicons name="restaurant-outline" size={18} color={colors.text} style={{ marginRight: 6 }} />
             <Text style={styles.libraryButtonText}>Preset Plans</Text>
           </TouchableOpacity>
         </View>
@@ -620,11 +631,17 @@ export default function MealPlanScreen() {
                         {meal.ingredients && meal.ingredients.length > 0 && (
                           <View style={styles.ingredientsList}>
                             <Text style={styles.ingredientsTitle}>Ingredients:</Text>
-                            {meal.ingredients.map((ing, i) => (
-                              <Text key={i} style={styles.ingredientItem}>
-                                • {ing.name}: {ing.amount} {ing.unit || ''}
-                              </Text>
-                            ))}
+                            {meal.ingredients.map((ing, i) => {
+                              // Handle both string and object formats
+                              const ingName = typeof ing === 'string' ? ing : ing.name;
+                              const ingAmount = typeof ing === 'string' ? '' : ing.amount;
+                              const ingUnit = typeof ing === 'string' ? '' : (ing.unit || '');
+                              return (
+                                <Text key={i} style={styles.ingredientItem}>
+                                  • {ingName}{ingAmount ? `: ${ingAmount} ${ingUnit}`.trim() : ''}
+                                </Text>
+                              );
+                            })}
                           </View>
                         )}
                         {meal.instructions && (
@@ -659,13 +676,25 @@ export default function MealPlanScreen() {
                         const dayMeals = generatedMealPlan.plan[dayKey];
 
                         for (const meal of dayMeals.meals) {
+                          // Normalize ingredients format
+                          let normalizedIngredients = meal.ingredients;
+                          if (Array.isArray(meal.ingredients) && meal.ingredients.length > 0) {
+                            if (typeof meal.ingredients[0] === 'string') {
+                              normalizedIngredients = (meal.ingredients as string[]).map((ing) => ({
+                                name: ing,
+                                amount: '',
+                                unit: '',
+                              }));
+                            }
+                          }
+                          
                           await addDoc(collection(db, 'users', user.uid, 'meals', dateISO, 'entries'), {
                             label: meal.name,
                             calories: meal.calories,
                             proteinG: meal.proteinG,
                             carbsG: meal.carbsG,
                             fatsG: meal.fatsG,
-                            ingredients: meal.ingredients || null,
+                            ingredients: normalizedIngredients || null,
                             instructions: meal.instructions || null,
                             createdAt: serverTimestamp(),
                           });
@@ -722,6 +751,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     flex: 1,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: colors.textDim,
+    marginTop: 4,
   },
   aiButton: {
     backgroundColor: colors.accent,
@@ -912,6 +946,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     flexDirection: 'row',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   libraryButtonText: {
     color: colors.text,

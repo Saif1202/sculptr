@@ -17,3 +17,13 @@ export const colors = {
   shadowStrong: 'rgba(0, 0, 0, 0.1)', // Stronger shadow for elevation
 };
 
+/** Use for TouchableOpacity to get smooth press feedback (Apple/Android HIG) */
+export const pressOpacity = 0.7;
+
+/** Default animation durations (ms) for transitions */
+export const animationDurations = {
+  short: 200,
+  normal: 300,
+  long: 400,
+};
+

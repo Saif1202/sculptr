@@ -1,24 +1,31 @@
+import { Platform } from 'react-native';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
-// RevenueCat Public SDK Keys
+// RevenueCat Public SDK Keys – replace with your keys from RevenueCat dashboard (Project → API Keys)
 const RC_IOS_KEY = 'test_BxTatzNMmyPOwGcAKwYEbNYjoXM';
 const RC_ANDROID_KEY = 'test_BxTatzNMmyPOwGcAKwYEbNYjoXM';
 
+let purchasesConfigured = false;
+
 /**
- * Initialize RevenueCat Purchases SDK
+ * Initialize RevenueCat Purchases SDK (call once per app launch after user is known).
+ * Safe to call on web – no-ops when platform is not ios/android.
  * @param userId - Firebase user ID
- * @param platform - 'ios' or 'android'
  */
-export async function initPurchases(userId: string, platform: 'ios' | 'android'): Promise<void> {
+export async function initPurchases(userId: string): Promise<void> {
+  const platform = Platform.OS;
+  if (platform !== 'ios' && platform !== 'android') {
+    return;
+  }
   try {
     const apiKey = platform === 'ios' ? RC_IOS_KEY : RC_ANDROID_KEY;
-    
-    await Purchases.configure({ apiKey });
+    if (!purchasesConfigured) {
+      await Purchases.configure({ apiKey });
+      purchasesConfigured = true;
+    }
     await Purchases.logIn(userId);
-    
-    console.log('RevenueCat initialized for user:', userId);
   } catch (error) {
     console.error('Error initializing RevenueCat:', error);
     throw error;

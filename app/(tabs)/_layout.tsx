@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '../../src/theme';
+import { colors, pressOpacity } from '../../src/theme';
 
 function ChatButton() {
   const router = useRouter();
@@ -12,7 +12,7 @@ function ChatButton() {
     <TouchableOpacity
       style={styles.chatButton}
       onPress={() => router.push('/chat')}
-      activeOpacity={0.8}
+      activeOpacity={pressOpacity}
     >
       <View style={styles.chatButtonInner}>
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
@@ -48,6 +48,7 @@ export default function DrawerLayout() {
             <TouchableOpacity
               onPress={() => navigation.toggleDrawer()}
               style={styles.hamburgerButton}
+              activeOpacity={pressOpacity}
             >
               <Ionicons name="menu" size={28} color={colors.text} />
             </TouchableOpacity>
@@ -61,6 +62,7 @@ export default function DrawerLayout() {
               <TouchableOpacity
                 onPress={() => navigation.navigate('index')}
                 style={styles.headerHomeButton}
+                activeOpacity={pressOpacity}
               >
                 <Ionicons name="home" size={24} color={colors.accent} />
               </TouchableOpacity>

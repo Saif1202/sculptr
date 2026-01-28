@@ -46,6 +46,7 @@ import StartSessionModal from '../(modals)/start-session';
 import SessionHistoryModal, { SessionHistoryItem } from '../(modals)/session-history';
 import { calcAge } from '../../src/logic/nutrition';
 import { generateWorkoutProgram, GenerateWorkoutProgramPayload, GeneratedWorkout } from '../../src/lib/functions';
+import { Ionicons } from '@expo/vector-icons';
 
 type TabKey = 'library' | 'workouts' | 'schedule';
 
@@ -304,6 +305,38 @@ export default function TrainingScreen() {
 
   useEffect(() => {
     if (!user) {
+      setWorkouts([]);
+      return;
+    }
+    const workoutsRef = collection(db, 'users', user.uid, 'workouts');
+    const unsubscribe = onSnapshot(
+      workoutsRef,
+      (snapshot) => {
+        const workoutList: WorkoutItem[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          workoutList.push({
+            id: docSnap.id,
+            name: data.name || 'Unnamed Workout',
+            goal: data.goal,
+            tags: data.tags || [],
+            exercises: data.exercises || [],
+            type: data.type || 'strength',
+            cardio: data.cardio || null,
+          });
+        });
+        setWorkouts(workoutList);
+      },
+      (error) => {
+        console.warn('Error loading workouts:', error);
+        setWorkouts([]);
+      }
+    );
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
       setSessionHistory([]);
       setHistoryLoading(false);
       return;
@@ -506,13 +539,26 @@ export default function TrainingScreen() {
       
       if (result.workouts && result.workouts.length > 0) {
         setGeneratedWorkouts(result.workouts);
-        // Initialize schedule with AI suggestions or empty
+        // Initialize schedule with AI suggestions - auto-populate if schedule provided
         const initialSchedule: Record<string, string> = {};
         if (result.schedule) {
           Object.entries(result.schedule).forEach(([day, workoutName]) => {
             const workout = result.workouts.find(w => w.name === workoutName);
             if (workout) {
-              initialSchedule[day] = workout.name;
+              // Map day names to planner keys
+              const dayMap: Record<string, keyof PlannerDays> = {
+                'Mon': 'Monday',
+                'Tue': 'Tuesday',
+                'Wed': 'Wednesday',
+                'Thu': 'Thursday',
+                'Fri': 'Friday',
+                'Sat': 'Saturday',
+                'Sun': 'Sunday',
+              };
+              const plannerDay = dayMap[day];
+              if (plannerDay) {
+                initialSchedule[plannerDay] = workout.name;
+              }
             }
           });
         }
@@ -535,8 +581,11 @@ export default function TrainingScreen() {
     try {
       // Save generated workouts and track IDs
       const workoutIdMap: Record<string, string> = {};
-      for (const workout of generatedWorkouts) {
-        const workoutId = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const baseTimestamp = Date.now();
+      for (let i = 0; i < generatedWorkouts.length; i++) {
+        const workout = generatedWorkouts[i];
+        // Use unique ID with index to avoid conflicts
+        const workoutId = `ai-${baseTimestamp}-${i}-${Math.random().toString(36).substr(2, 9)}`;
         const workoutRef = doc(db, 'users', user.uid, 'workouts', workoutId);
         
         await setDoc(workoutRef, {
@@ -581,9 +630,21 @@ export default function TrainingScreen() {
       setWorkoutSelectionVisible(false);
       setGeneratedWorkouts([]);
       setSelectedWorkoutSchedule({});
+      
+      // Count scheduled days
+      const scheduledDays = Object.keys(selectedWorkoutSchedule).length;
+      
+      // Refresh workouts list - it will update automatically via Firestore listener
       Alert.alert(
         'Success!',
-        `Generated ${generatedWorkouts.length} workout${generatedWorkouts.length > 1 ? 's' : ''} and scheduled them!`
+        `Generated ${generatedWorkouts.length} workout${generatedWorkouts.length > 1 ? 's' : ''} and scheduled ${scheduledDays} day${scheduledDays !== 1 ? 's' : ''} to your weekly plan. Your schedule is now updated in both the Home and Training screens.`,
+        [
+          {
+            text: 'View Schedule',
+            onPress: () => setActiveTab('schedule'),
+          },
+          { text: 'OK' },
+        ]
       );
     } catch (error: any) {
       console.error('Error applying workout schedule:', error);
@@ -754,7 +815,10 @@ export default function TrainingScreen() {
         {aiGenerating ? (
           <ActivityIndicator color={colors.text} size="small" />
         ) : (
-          <Text style={styles.addButtonText}>🤖 AI Generate Program</Text>
+          <>
+            <Ionicons name="sparkles" size={16} color={colors.text} style={{ marginRight: 6 }} />
+            <Text style={styles.addButtonText}>AI Generate Program</Text>
+          </>
         )}
       </TouchableOpacity>
 
@@ -767,7 +831,14 @@ export default function TrainingScreen() {
 
       <ScrollView style={styles.listContainer}>
         {displayedWorkouts.map((workout) => (
-          <View key={workout.id} style={styles.workoutCard}>
+          <TouchableOpacity
+            key={workout.id}
+            style={styles.workoutCard}
+            onPress={() => {
+              setSessionWorkout(workout);
+              setSessionVisible(true);
+            }}
+          >
             <View style={{ flex: 1 }}>
               <View style={styles.workoutHeader}>
                 <Text style={styles.workoutTitle}>{workout.name}</Text>
@@ -778,41 +849,55 @@ export default function TrainingScreen() {
                 </View>
               </View>
               {workout.tags?.length ? (
-                <Text style={styles.exerciseMetaSmall}>{workout.tags.join(' • ')}</Text>
+                <View style={styles.tagsContainer}>
+                  {workout.tags.slice(0, 2).map((tag, idx) => (
+                    <View key={idx} style={styles.tagBadge}>
+                      <Text style={styles.tagBadgeText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
               ) : null}
-              {workout.goal ? (
-                <Text style={styles.exerciseMetaSmall}>{workout.goal}</Text>
-              ) : null}
+              {workout.goal && (
+                <Text style={styles.exerciseMetaSmall}>Goal: {workout.goal}</Text>
+              )}
               <Text style={styles.exerciseMetaSmall}>
                 {workout.type === 'cardio'
                   ? `${workout.cardio?.intervals.length ?? 0} intervals`
                   : `${workout.exercises?.length ?? 0} exercises`}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.smallButton, styles.secondaryButton]}
-              onPress={() => {
-                setBuilderPresetExercise(null);
-                setBuilderWorkout(workout);
-                setBuilderVisible(true);
-              }}
-            >
-              <Text style={styles.smallButtonText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.smallButton, styles.primaryButton]}
-              onPress={() => {
-                setSessionWorkout(workout);
-                setSessionVisible(true);
-              }}
-            >
-              <Text style={styles.smallButtonText}>Start</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.workoutActions}>
+              <TouchableOpacity
+                style={[styles.smallButton, styles.secondaryButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setBuilderPresetExercise(null);
+                  setBuilderWorkout(workout);
+                  setBuilderVisible(true);
+                }}
+              >
+                <Ionicons name="create-outline" size={14} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smallButton, styles.primaryButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSessionWorkout(workout);
+                  setSessionVisible(true);
+                }}
+              >
+                <Ionicons name="play" size={14} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         ))}
         {!displayedWorkouts.length ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No workouts yet. Create one to get started.</Text>
+            <Ionicons name="barbell-outline" size={48} color={colors.textDim} style={{ marginBottom: 12 }} />
+            <Text style={styles.emptyStateText}>No workouts yet</Text>
+            <Text style={[styles.emptyStateText, { fontSize: 13, marginTop: 4 }]}>
+              Create one manually or generate with AI
+            </Text>
           </View>
         ) : null}
       </ScrollView>
@@ -823,11 +908,11 @@ export default function TrainingScreen() {
     <View>
       <View style={styles.weekHeader}>
         <TouchableOpacity onPress={() => setWeekStart(addDaysISO(weekStart, -7))}>
-          <Text style={styles.weekNav}>◀︎ Prev</Text>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.weekTitle}>Week of {weekStart}</Text>
         <TouchableOpacity onPress={() => setWeekStart(addDaysISO(weekStart, 7))}>
-          <Text style={styles.weekNav}>Next ▶︎</Text>
+          <Ionicons name="chevron-forward" size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -847,12 +932,22 @@ export default function TrainingScreen() {
                 setAssignModalVisible(true);
               }}
             >
-              <Text style={styles.dayLabel}>{day.short}</Text>
-              <Text style={styles.dayDate}>{dateISO.slice(5)}</Text>
+              <View style={styles.dayCellHeader}>
+                <Text style={styles.dayLabel}>{day.short}</Text>
+                <Text style={styles.dayDate}>{dateISO.slice(5)}</Text>
+              </View>
               {workout ? (
-                <Text style={styles.dayAssignment}>{workout.name}</Text>
+                <View style={styles.workoutAssignment}>
+                  <Text style={styles.dayAssignment} numberOfLines={2}>{workout.name}</Text>
+                  {workout.tags && workout.tags.length > 0 && (
+                    <Text style={styles.workoutTags} numberOfLines={1}>{workout.tags[0]}</Text>
+                  )}
+                </View>
               ) : (
-                <Text style={styles.dayAssignmentEmpty}>+</Text>
+                <View style={styles.emptyAssignment}>
+                  <Ionicons name="add-circle-outline" size={24} color={colors.textDim} />
+                  <Text style={styles.dayAssignmentEmpty}>Tap to assign</Text>
+                </View>
               )}
             </TouchableOpacity>
           );
@@ -861,10 +956,20 @@ export default function TrainingScreen() {
 
       {todayAssignment ? (
         <TouchableOpacity style={[styles.addButton, styles.primaryButton]} onPress={startAssignedWorkout}>
+          <Ionicons name="play-circle" size={20} color={colors.text} style={{ marginRight: 8 }} />
           <Text style={styles.addButtonText}>Start Today&apos;s Workout</Text>
         </TouchableOpacity>
       ) : (
-        <Text style={styles.emptyStateText}>No workout scheduled for today.</Text>
+        <View style={styles.noWorkoutCard}>
+          <Ionicons name="calendar-outline" size={32} color={colors.textDim} />
+          <Text style={styles.emptyStateText}>No workout scheduled for today</Text>
+          <TouchableOpacity
+            style={[styles.addButton, styles.secondaryButton, { marginTop: 12 }]}
+            onPress={() => setActiveTab('workouts')}
+          >
+            <Text style={styles.addButtonText}>Create or Generate Workout</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -918,21 +1023,21 @@ export default function TrainingScreen() {
         visible={builderVisible}
         onClose={closeBuilder}
         uid={user?.uid}
-        workout={builderWorkout}
+        workout={builderWorkout ?? undefined}
         availableExercises={allExercises.map((ex) => ({
-          id: ex.id,
-          name: ex.name,
-          muscles: ex.muscles,
-          equipment: ex.equipment,
-          movement: ex.movement,
-          unit: ex.unit,
+          id: ex.id ?? '',
+          name: ex.name ?? 'Exercise',
+          muscles: Array.isArray(ex.muscles) ? ex.muscles : [],
+          equipment: ex.equipment ?? 'Other',
+          movement: ex.movement ?? 'Compound',
+          unit: ex.unit ?? 'kg',
         }))}
-        presetExercise={builderPresetExercise}
+        presetExercise={builderPresetExercise ?? undefined}
         onSaved={() => {
           closeBuilder();
         }}
         onLocalSave={handleLocalWorkoutSave}
-        userAge={profileAge}
+        userAge={profileAge ?? undefined}
       />
 
       <StartSessionModal
@@ -1073,9 +1178,11 @@ export default function TrainingScreen() {
       <Modal visible={workoutPrefsVisible} transparent animationType="slide" onRequestClose={() => setWorkoutPrefsVisible(false)}>
         <View style={styles.assignOverlay}>
           <View style={styles.assignCard}>
-            <Text style={styles.modalTitle}>Workout Preferences</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>AI Workout Preferences</Text>
+            </View>
             <ScrollView>
-              <Text style={styles.inputLabel}>Days Per Week</Text>
+              <Text style={styles.inputLabel}>How many days per week?</Text>
               <View style={styles.chipRow}>
                 {[3, 4, 5, 6].map((days) => (
                   <TouchableOpacity
@@ -1083,12 +1190,12 @@ export default function TrainingScreen() {
                     style={[styles.chip, workoutDaysPerWeek === days && styles.chipActive]}
                     onPress={() => setWorkoutDaysPerWeek(days)}
                   >
-                    <Text style={styles.chipText}>{days}</Text>
+                    <Text style={styles.chipText}>{days} days</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.inputLabel}>Experience Level</Text>
+              <Text style={styles.inputLabel}>Your experience level</Text>
               <View style={styles.chipRow}>
                 {(['beginner', 'intermediate', 'advanced'] as const).map((level) => (
                   <TouchableOpacity
@@ -1100,6 +1207,10 @@ export default function TrainingScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+              
+              <Text style={[styles.inputLabel, { marginTop: 20, fontSize: 12, color: colors.textDim }]}>
+                AI will generate {workoutDaysPerWeek} personalized workouts based on your profile and preferences.
+              </Text>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => setWorkoutPrefsVisible(false)}>
@@ -1118,53 +1229,78 @@ export default function TrainingScreen() {
       <Modal visible={workoutSelectionVisible} transparent animationType="slide" onRequestClose={() => setWorkoutSelectionVisible(false)}>
         <View style={styles.assignOverlay}>
           <View style={[styles.assignCard, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>Schedule Your Workouts</Text>
-            <Text style={[styles.inputLabel, { marginBottom: 16 }]}>Select workouts for each day:</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Schedule Your Workouts</Text>
+            </View>
+            <Text style={[styles.inputLabel, { marginBottom: 16, marginTop: 8, fontSize: 13 }]}>
+              Tap each day to assign a workout. You can leave days empty for rest days.
+            </Text>
             <ScrollView style={{ maxHeight: 400 }}>
-              {plannerDayKeys.map((day) => (
-                <View key={day} style={styles.scheduleDayRow}>
-                  <Text style={styles.dayLabel}>{day}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.workoutPicker}>
-                    <TouchableOpacity
-                      style={[
-                        styles.workoutOption,
-                        !selectedWorkoutSchedule[day] && styles.workoutOptionSelected,
-                      ]}
-                      onPress={() => {
-                        const newSchedule = { ...selectedWorkoutSchedule };
-                        delete newSchedule[day];
-                        setSelectedWorkoutSchedule(newSchedule);
-                      }}
-                    >
-                      <Text style={styles.workoutOptionText}>None</Text>
-                    </TouchableOpacity>
-                    {generatedWorkouts.map((workout) => (
+              {plannerDayKeys.map((day) => {
+                const selectedWorkout = generatedWorkouts.find(w => selectedWorkoutSchedule[day] === w.name);
+                return (
+                  <View key={day} style={styles.scheduleDayRow}>
+                    <View style={styles.scheduleDayHeader}>
+                      <Text style={styles.dayLabel}>{day}</Text>
+                      {selectedWorkout && (
+                        <View style={styles.workoutPreview}>
+                          <Text style={styles.workoutPreviewText} numberOfLines={1}>
+                            {selectedWorkout.exercises?.length || 0} exercises
+                            {selectedWorkout.tags && selectedWorkout.tags.length > 0 && ` • ${selectedWorkout.tags[0]}`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.workoutPicker}>
                       <TouchableOpacity
-                        key={workout.name}
                         style={[
                           styles.workoutOption,
-                          selectedWorkoutSchedule[day] === workout.name && styles.workoutOptionSelected,
+                          !selectedWorkoutSchedule[day] && styles.workoutOptionSelected,
                         ]}
                         onPress={() => {
-                          setSelectedWorkoutSchedule({
-                            ...selectedWorkoutSchedule,
-                            [day]: workout.name,
-                          });
+                          const newSchedule = { ...selectedWorkoutSchedule };
+                          delete newSchedule[day];
+                          setSelectedWorkoutSchedule(newSchedule);
                         }}
                       >
-                        <Text style={styles.workoutOptionText}>{workout.name}</Text>
+                        <Text style={styles.workoutOptionText}>None</Text>
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              ))}
+                      {generatedWorkouts.map((workout) => (
+                        <TouchableOpacity
+                          key={workout.name}
+                          style={[
+                            styles.workoutOption,
+                            selectedWorkoutSchedule[day] === workout.name && styles.workoutOptionSelected,
+                          ]}
+                          onPress={() => {
+                            setSelectedWorkoutSchedule({
+                              ...selectedWorkoutSchedule,
+                              [day]: workout.name,
+                            });
+                          }}
+                        >
+                          <Text style={styles.workoutOptionText} numberOfLines={1}>{workout.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                );
+              })}
             </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => setWorkoutSelectionVisible(false)}>
                 <Text style={styles.secondaryText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={handleApplyWorkoutSchedule}>
-                <Text style={styles.primaryText}>Apply Schedule</Text>
+              <TouchableOpacity 
+                style={[styles.button, styles.primaryButton]} 
+                onPress={handleApplyWorkoutSchedule}
+                disabled={Object.keys(selectedWorkoutSchedule).length === 0}
+              >
+                <Text style={styles.primaryText}>
+                  {Object.keys(selectedWorkoutSchedule).length > 0 
+                    ? `Apply Schedule (${Object.keys(selectedWorkoutSchedule).length} day${Object.keys(selectedWorkoutSchedule).length > 1 ? 's' : ''})`
+                    : 'Apply Schedule'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1334,6 +1470,34 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  tagBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  tagBadgeText: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  workoutActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 12,
   },
   workoutHeader: {
     flexDirection: 'row',
@@ -1373,11 +1537,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   smallButton: {
-    marginLeft: 10,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 40,
   },
   smallButtonText: {
     color: colors.text,
@@ -1398,34 +1563,69 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 16,
     marginBottom: 12,
+    minHeight: 120,
   },
   dayCellToday: {
     borderColor: colors.accent,
+    borderWidth: 2,
+    backgroundColor: colors.card,
+  },
+  dayCellHeader: {
+    marginBottom: 12,
   },
   dayLabel: {
     color: colors.text,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
+    marginBottom: 4,
   },
   dayDate: {
     color: colors.textDim,
     fontSize: 12,
-    marginBottom: 8,
+  },
+  workoutAssignment: {
+    flex: 1,
+    justifyContent: 'center',
   },
   dayAssignment: {
     color: colors.text,
     fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  workoutTags: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  emptyAssignment: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   dayAssignmentEmpty: {
     color: colors.textDim,
-    fontSize: 24,
+    fontSize: 12,
     textAlign: 'center',
+    marginTop: 4,
+  },
+  noWorkoutCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 32,
+    alignItems: 'center',
+    marginTop: 20,
   },
   weekHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 12,
+    marginBottom: 20,
+    paddingHorizontal: 8,
   },
   weekNav: {
     color: colors.textDim,
@@ -1434,6 +1634,7 @@ const styles = StyleSheet.create({
   weekTitle: {
     color: colors.text,
     fontWeight: '700',
+    fontSize: 16,
   },
   modalContainer: {
     flex: 1,
@@ -1441,11 +1642,16 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 60,
   },
+  modalHeader: {
+    marginBottom: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   modalTitle: {
     color: colors.text,
     fontSize: 22,
     fontWeight: '700',
-    marginBottom: 12,
   },
   inputLabel: {
     color: colors.textDim,
@@ -1543,6 +1749,21 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  scheduleDayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  workoutPreview: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  workoutPreviewText: {
+    color: colors.textDim,
+    fontSize: 11,
+    textAlign: 'right',
   },
   workoutPicker: {
     marginTop: 8,

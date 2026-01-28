@@ -390,12 +390,24 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <Logo size={56} rounded />
-          <Text style={styles.caption}>Welcome to SculptR</Text>
+          <Text style={styles.caption}>
+            {user?.displayName?.trim()
+              ? `Welcome, ${user.displayName.trim()}`
+              : user?.email
+                ? `Welcome, ${user.email.split('@')[0]}`
+                : 'Welcome to SculptR'}
+          </Text>
         </View>
 
         {error || !targets ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Welcome to SculptR</Text>
+            <Text style={styles.cardTitle}>
+              {user?.displayName?.trim()
+                ? `Welcome, ${user.displayName.trim()}`
+                : user?.email
+                  ? `Welcome, ${user.email.split('@')[0]}`
+                  : 'Welcome to SculptR'}
+            </Text>
             <Text style={styles.cardText}>
               Your fitness journey starts here. Track your meals, training, and progress.
             </Text>

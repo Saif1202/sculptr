@@ -643,39 +643,83 @@ export default function StartSessionModal({ visible, onClose, uid, workout, name
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
-        <Text style={styles.title}>{workout?.name ?? name ?? 'Training Session'}</Text>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>{workout?.name ?? name ?? 'Training Session'}</Text>
+            {workout?.tags && workout.tags.length > 0 && (
+              <View style={styles.tagsRow}>
+                {workout.tags.map((tag, idx) => (
+                  <View key={idx} style={styles.tag}>
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
         {isCardio ? (
           renderCardioContent()
         ) : (
           <>
             <ScrollView contentContainerStyle={styles.content}>
-              {exercises.map((exercise) => (
-                <ExerciseEntry
-                  key={exercise.exerciseId}
-                  exercise={exercise}
-                  onAddSet={handleAddSet}
-                  onRename={exercise.isCustom ? (name) => updateCustomExerciseName(exercise.exerciseId, name) : undefined}
-                  onRemove={exercise.isCustom ? () => removeCustomExercise(exercise.exerciseId) : undefined}
-                />
-              ))}
-              <TouchableOpacity style={[styles.button, styles.addExerciseButton]} onPress={handleAddExercise}>
-                <Text style={styles.addSetText}>+ Add Exercise</Text>
-              </TouchableOpacity>
+              {exercises.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No exercises in this workout</Text>
+                  <TouchableOpacity style={[styles.button, styles.addExerciseButton]} onPress={handleAddExercise}>
+                    <Text style={styles.addSetText}>+ Add Exercise</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  {exercises.map((exercise) => (
+                    <ExerciseEntry
+                      key={exercise.exerciseId}
+                      exercise={exercise}
+                      onAddSet={handleAddSet}
+                      onRename={exercise.isCustom ? (name) => updateCustomExerciseName(exercise.exerciseId, name) : undefined}
+                      onRemove={exercise.isCustom ? () => removeCustomExercise(exercise.exerciseId) : undefined}
+                    />
+                  ))}
+                  <TouchableOpacity style={[styles.button, styles.addExerciseButton]} onPress={handleAddExercise}>
+                    <Text style={styles.addSetText}>+ Add Exercise</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
 
             {activeRest != null ? (
               <View style={styles.restBanner}>
-                <Text style={styles.restText}>Rest: {activeRest}s</Text>
-                <TouchableOpacity onPress={stopRestTimer}>
-                  <Text style={styles.stopRest}>Skip</Text>
-                </TouchableOpacity>
+                <View style={styles.restContent}>
+                  <Text style={styles.restText}>⏱ Rest: {activeRest}s</Text>
+                  <TouchableOpacity onPress={stopRestTimer} style={styles.skipButton}>
+                    <Text style={styles.skipText}>Skip</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
 
-            <View style={styles.summaryBar}>
-              <Text style={styles.summaryText}>Sets: {totalSets}</Text>
-              <Text style={styles.summaryText}>Volume: {summary.volume}</Text>
-            </View>
+            {totalSets > 0 && (
+              <View style={styles.summaryBar}>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>Sets</Text>
+                  <Text style={styles.summaryValue}>{totalSets}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>Volume</Text>
+                  <Text style={styles.summaryValue}>{summary.volume.toFixed(1)} {exercises[0]?.unit || 'kg'}</Text>
+                </View>
+                {summary.bestEst1RM && (
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryLabel}>Est. 1RM</Text>
+                    <Text style={styles.summaryValue}>{summary.bestEst1RM.toFixed(1)} {exercises[0]?.unit || 'kg'}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </>
         )}
 
@@ -688,7 +732,7 @@ export default function StartSessionModal({ visible, onClose, uid, workout, name
             onPress={handleFinish}
             disabled={saving || (workoutType === 'strength' && !sets.length)}
           >
-            {saving ? <ActivityIndicator color={colors.text} /> : <Text style={styles.confirmText}>Finish</Text>}
+            {saving ? <ActivityIndicator color={colors.text} /> : <Text style={styles.confirmText}>Finish Workout</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -743,9 +787,36 @@ function ExerciseEntry({
           </TouchableOpacity>
         ) : null}
       </View>
-      <Text style={styles.exerciseMeta}>
-        Sets logged: {exercise.setsCompleted} · Rest {exercise.restSec ?? DEFAULT_REST}s
-      </Text>
+      <View style={styles.exerciseDetails}>
+        <View style={styles.detailRow}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Target Sets</Text>
+            <Text style={styles.detailValue}>{exercise.targetSets}</Text>
+          </View>
+          {exercise.repTarget && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Reps</Text>
+              <Text style={styles.detailValue}>{exercise.repTarget}</Text>
+            </View>
+          )}
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Rest</Text>
+            <Text style={styles.detailValue}>{exercise.restSec ?? DEFAULT_REST}s</Text>
+          </View>
+          {exercise.rpeTarget && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>RPE</Text>
+              <Text style={styles.detailValue}>{exercise.rpeTarget}</Text>
+            </View>
+          )}
+        </View>
+        {exercise.notes && (
+          <Text style={styles.exerciseNotes}>{exercise.notes}</Text>
+        )}
+        <Text style={styles.exerciseMeta}>
+          Sets completed: {exercise.setsCompleted} / {exercise.targetSets}
+        </Text>
+      </View>
       <View style={styles.inputRow}>
         <TextInput
           style={styles.field}
@@ -791,14 +862,59 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
     paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerContent: {
+    flex: 1,
   },
   title: {
     color: colors.text,
     fontSize: 24,
     fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  tag: {
+    backgroundColor: colors.accent,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  tagText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  closeButton: {
+    padding: 8,
+    marginLeft: 12,
+  },
+  closeButtonText: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: colors.textDim,
+    fontSize: 16,
+    marginBottom: 20,
   },
   content: {
     paddingBottom: 120,
@@ -834,10 +950,47 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginRight: 12,
   },
+  exerciseDetails: {
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  detailItem: {
+    backgroundColor: colors.bg,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailLabel: {
+    color: colors.textDim,
+    fontSize: 10,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  exerciseNotes: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginBottom: 6,
+    paddingLeft: 4,
+  },
   exerciseMeta: {
     color: colors.textDim,
     fontSize: 12,
-    marginBottom: 10,
+    marginTop: 4,
   },
   inputRow: {
     flexDirection: 'row',
@@ -880,18 +1033,24 @@ const styles = StyleSheet.create({
     bottom: 100,
     left: 20,
     right: 20,
-    backgroundColor: colors.card,
+    backgroundColor: colors.accent,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  restContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   restText: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
   },
   stopRest: {
     color: colors.danger,
@@ -926,13 +1085,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   summaryBar: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    justifyContent: 'space-around',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  summaryItem: {
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    color: colors.textDim,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  summaryValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
   summaryText: {
-    color: colors.textDim,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  skipButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 6,
+  },
+  skipText: {
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '600',
   },
   cardioHeader: {
